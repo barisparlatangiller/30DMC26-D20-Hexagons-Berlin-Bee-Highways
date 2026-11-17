@@ -1,0 +1,70 @@
+name: Fetch GBIF bees + OSM Berlin (pilot)
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [".github/workflows/fetch.yml"]
+permissions:
+  contents: write
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Tools
+        run: sudo apt-get update -q && sudo apt-get install -y -q osmium-tool gdal-bin unzip
+      - name: GBIF download 0013172-261110092616502
+        run: |
+          set -x
+          mkdir -p /tmp/f/out && cd /tmp/f
+          curl -fsSL https://api.gbif.org/v1/occurrence/download/0013172-261110092616502 -o out/gbif_download_meta.json
+          python3 -c "import json;d=json.load(open('out/gbif_download_meta.json'));print(json.dumps({k:d.get(k) for k in ['status','totalRecords','size','doi','license','created','downloadLink']},indent=1));print(json.dumps(d['request'],indent=1)[:3000])"
+          U=$(python3 -c "import json;print(json.load(open('out/gbif_download_meta.json'))['downloadLink'])")
+          curl -fsSL --retry 3 -o g.zip "$U"
+          unzip -o -q g.zip -d g && ls -la g
+          F=$(ls g/*.csv | head -1)
+          python3 - "$F" <<'PY'
+          import csv, sys
+          csv.field_size_limit(10**9)
+          f = sys.argv[1]
+          with open(f, newline='', encoding='utf-8') as fh:
+              r = csv.reader(fh, delimiter='\t'); h = next(r); print(h)
+              keep = ['gbifID','datasetKey','occurrenceID','kingdom','phylum','class','order','family','genus','species','infraspecificEpithet','taxonRank','scientificName','countryCode','locality','stateProvince','occurrenceStatus','individualCount','decimalLatitude','decimalLongitude','coordinateUncertaintyInMeters','eventDate','day','month','year','taxonKey','speciesKey','basisOfRecord','institutionCode','collectionCode','recordedBy','license','rightsHolder','issue']
+              ix = [h.index(k) for k in keep if k in h]
+              lat, lon = h.index('decimalLatitude'), h.index('decimalLongitude')
+              n = m = 0
+              fams = {}
+              with open('out/gbif_berlin.csv', 'w', newline='', encoding='utf-8') as o:
+                  w = csv.writer(o); w.writerow([h[i] for i in ix])
+                  for row in r:
+                      n += 1
+                      try:
+                          la, lo = float(row[lat]), float(row[lon])
+                      except Exception:
+                          continue
+                      if 52.33 < la < 52.68 and 13.08 < lo < 13.77:
+                          w.writerow([row[i] for i in ix]); m += 1
+                          fa = row[h.index('family')]; fams[fa] = fams.get(fa, 0) + 1
+          print('rows', n, 'berlin', m); print(sorted(fams.items(), key=lambda x: -x[1])[:20])
+          PY
+          ls -la out
+      - name: OSM Berlin (Geofabrik) → pilot layers
+        run: |
+          set -x
+          cd /tmp/f
+          curl -fsSL --retry 3 -o berlin.osm.pbf https://download.geofabrik.de/europe/germany/berlin-latest.osm.pbf
+          osmium extract -b 13.33,52.42,13.52,52.51 berlin.osm.pbf -o pilot.osm.pbf --overwrite
+          osmium tags-filter pilot.osm.pbf w/building r/building -o b.osm.pbf --overwrite
+          ogr2ogr -f GPKG out/osm_pilot.gpkg b.osm.pbf multipolygons -nln buildings -sql "SELECT osm_id, osm_way_id, building, other_tags FROM multipolygons WHERE building IS NOT NULL"
+          osmium tags-filter pilot.osm.pbf nwr/highway=bus_stop nwr/public_transport=platform,stop_position nwr/railway=tram_stop,station,halt -o s.osm.pbf --overwrite
+          ogr2ogr -f GPKG -update out/osm_pilot.gpkg s.osm.pbf points -nln stops
+          osmium tags-filter pilot.osm.pbf w/highway w/railway w/waterway -o r.osm.pbf --overwrite
+          ogr2ogr -f GPKG -update out/osm_pilot.gpkg r.osm.pbf lines -nln lines
+          osmium tags-filter pilot.osm.pbf nwr/natural=water nwr/landuse nwr/leisure nwr/amenity -o l.osm.pbf --overwrite
+          ogr2ogr -f GPKG -update out/osm_pilot.gpkg l.osm.pbf multipolygons -nln areas
+          ogrinfo -so out/osm_pilot.gpkg buildings | grep Feature; ogrinfo -so out/osm_pilot.gpkg stops | grep Feature
+          ls -la out
+      - name: Push to branch fetched
+        run: |
+          cd /tmp/f/out && git init -q -b fetched && git add -A && git -c user.name=gha -c user.email=gha@users.noreply.github.com commit -qm "GBIF Berlin bees + OSM pilot"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" fetched:fetched 2>&1 | tail -2
