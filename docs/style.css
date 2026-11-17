@@ -1,0 +1,87 @@
+/* Day 20 · Bee highways: warm paper, greens for flowers, honey for bees, violet for the missing links */
+:root{--bg:#f4efe4;--card:rgba(255,253,248,.94);--ink:#2b2925;--ink-2:#6f6a61;--ink-3:#9b958a;--line:#e6e0d5;--chip:#f3ede2;
+  --honey:#d9962a;--honey-2:#b97812;--violet:#8a7ac4;--green:#7aa65d;--shadow:0 1px 2px rgba(60,45,30,.06),0 8px 28px rgba(60,45,30,.12);--r:18px}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--ink);font:14px/1.55 Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.mono{font-family:"DM Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+button{font:inherit;color:inherit}
+a{color:var(--honey-2)}
+.app{position:relative;height:100vh}
+.mapwrap{position:absolute;inset:0}
+#map{position:absolute;inset:0}
+.card{background:var(--card);border-radius:var(--r);box-shadow:var(--shadow);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.panel{position:absolute;top:16px;left:16px;bottom:16px;width:372px;overflow-y:auto;padding:22px 22px 18px;z-index:3;scrollbar-width:thin}
+.eyebrow{margin:0 0 6px;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--honey-2);font-weight:600}
+h1{margin:0 0 8px;font-size:25px;line-height:1.15;font-weight:700;letter-spacing:-.015em}
+.lede{margin:0;color:var(--ink-2)}
+.lede b{color:var(--ink);font-weight:600}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:14px}
+.st{background:var(--chip);border-radius:12px;padding:9px 10px}
+.st b{display:block;font-size:19px;font-weight:500;color:var(--honey-2);line-height:1.1}
+.st span{display:block;font-size:11.5px;line-height:1.3;color:var(--ink-2);margin-top:3px}
+.block{padding:16px 0 4px}
+.label{margin:0 0 8px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+.hint{margin:8px 0 0;font-size:12.5px;color:var(--ink-2)}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:3px;background:var(--chip);padding:3px;border-radius:12px;margin:4px 0 8px}
+.seg button{border:0;background:transparent;padding:7px 8px;border-radius:9px;cursor:pointer;font-size:12.5px;font-weight:600;color:var(--ink-2);line-height:1.25}
+.seg button em{display:block;font-style:normal;font-weight:400;font-size:11px;color:var(--ink-3)}
+.seg button.on{background:var(--ink);color:#fdfbf7}
+.seg button.on em{color:#d8d2c6}
+#ba button.on[data-a="1"]{background:var(--violet)}
+.sl{display:grid;grid-template-columns:64px 1fr 74px;gap:8px;align-items:center;margin:6px 0}
+.sl span{font-size:12.5px;color:var(--ink-2)}
+.sl b{font-size:12.5px;font-weight:600;text-align:right}
+input[type=range]{width:100%;accent-color:var(--honey)}
+.isl{display:grid;grid-template-columns:auto auto auto;justify-content:start;align-items:baseline;gap:6px 10px;background:var(--chip);border-radius:12px;padding:10px 12px;margin-top:4px}
+.isl span{grid-column:1/-1;font-size:12px;color:var(--ink-2)}
+.isl b{font-size:20px;font-weight:500}
+.isl b.acc{color:var(--violet)}
+.isl i{font-style:normal;color:var(--ink-3)}
+.isl em{grid-column:1/-1;font-style:normal;font-size:11.5px;color:var(--ink-3)}
+.toggles{display:flex;flex-direction:column;gap:1px}
+.toggles label{display:grid;grid-template-columns:20px 1fr;column-gap:8px;align-items:center;padding:4px 8px;border-radius:10px;cursor:pointer}
+.toggles label:hover{background:var(--chip)}
+.toggles input{accent-color:var(--honey);margin:0}
+.toggles span{font-weight:500}
+.toggles em{grid-column:2;font-style:normal;font-size:12px;color:var(--ink-3);line-height:1.2}
+.stops{list-style:none;margin:0;padding:0;columns:2;column-gap:10px}
+.stops li{display:flex;gap:6px;align-items:baseline;font-size:12px;padding:2px 4px;border-radius:6px;cursor:pointer;break-inside:avoid}
+.stops li:hover{background:var(--chip)}
+.stops li b{color:var(--violet);min-width:18px}
+.howto{margin-top:12px;background:var(--chip);border-radius:12px;padding:10px 14px}
+.howto summary{cursor:pointer;font-weight:600;font-size:13px;list-style:none}
+.howto summary::-webkit-details-marker{display:none}
+.howto summary::before{content:"+";display:inline-block;width:14px;margin-right:4px;color:var(--honey-2);font-weight:700}
+.howto[open] summary::before{content:"–"}
+.howto ol,.howto p{margin:8px 0 2px;color:var(--ink-2);font-size:13px}
+.howto ol{padding-left:18px}
+.howto li{margin-bottom:5px}
+.howto b{color:var(--ink)}
+.refs{font-size:12px!important}
+.foot p{margin:14px 0 0;font-size:12px;color:var(--ink-3)}
+#detail{background:var(--chip);border-radius:12px;padding:12px 14px;margin-top:14px}
+#detail h3{margin:0 0 6px;font-size:14px;line-height:1.3}
+#detail .row{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;color:var(--ink-2);padding:2px 0}
+#detail .row b{color:var(--ink);font-weight:500;text-align:right}
+.mapbar{position:absolute;left:50%;transform:translateX(calc(-50% + 194px));top:16px;display:flex;gap:6px;padding:6px;z-index:3}
+.pill{border:1px solid var(--line);background:#fdfbf7;border-radius:999px;padding:6px 12px;cursor:pointer;font-size:12.5px;font-weight:500;text-decoration:none;color:var(--ink)}
+.pill:hover{border-color:var(--honey);color:var(--honey-2)}
+.pill.lang{font-weight:700}
+.legend{position:absolute;right:16px;bottom:30px;width:250px;padding:12px 14px;font-size:12px;color:var(--ink-2);z-index:3}
+.legend h4{margin:0 0 6px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+.legend .lg{display:grid;grid-template-columns:46px 1fr;gap:8px;align-items:center;margin:4px 0;line-height:1.25}
+.legend .ramp{display:block;height:10px;border-radius:3px;background:linear-gradient(90deg,#fcf6e4,#f4d680,#e8b03c,#c48016,#8c540a)}
+.legend .tk{display:flex;justify-content:space-between;font-size:10.5px;margin:-2px 0 4px 54px}
+.legend .sw{display:block;height:10px;border-radius:3px}
+.legend .dot{display:block;width:12px;height:12px;border-radius:50%;margin-left:17px}
+.loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-weight:600;color:var(--ink-2);background:var(--bg);z-index:9;transition:opacity .6s}
+.loading.gone{opacity:0;pointer-events:none}
+.maplibregl-ctrl-top-right{top:60px}
+@media (max-width:760px){
+  .panel{top:auto;left:8px;right:8px;bottom:8px;width:auto;max-height:44%;padding:16px}
+  h1{font-size:21px}
+  .mapbar{left:8px;right:8px;transform:none;flex-wrap:wrap;top:8px}
+  .legend{display:none}
+}
+body.film .panel,body.film .mapbar,body.film .legend,body.film .maplibregl-ctrl{display:none}

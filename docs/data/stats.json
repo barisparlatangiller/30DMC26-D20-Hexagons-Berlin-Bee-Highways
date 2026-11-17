@@ -1,0 +1,90 @@
+{
+ "biotopes": 3995,
+ "buildings": 28347,
+ "trees": 60411,
+ "obs_pilot": 1058,
+ "obs_berlin": 10895,
+ "stops": 628,
+ "taxa_pilot": 103,
+ "islands": {
+  "04": {
+   "eca_before": 304.5,
+   "eca_after": 587.2,
+   "largest_before": 203.6,
+   "largest_after": 581.0,
+   "networks": 95
+  },
+  "05": {
+   "eca_before": 520.8,
+   "eca_after": 869.5,
+   "largest_before": 446.5,
+   "largest_after": 868.4,
+   "networks": 85
+  },
+  "06": {
+   "eca_before": 582.9,
+   "eca_after": 1018.9,
+   "largest_before": 509.2,
+   "largest_after": 1018.8,
+   "networks": 110
+  },
+  "07": {
+   "eca_before": 401.3,
+   "eca_after": 763.6,
+   "largest_before": 312.5,
+   "largest_after": 762.2,
+   "networks": 147
+  },
+  "08": {
+   "eca_before": 394.3,
+   "eca_after": 573.2,
+   "largest_before": 311.3,
+   "largest_after": 545.2,
+   "networks": 78
+  },
+  "09": {
+   "eca_before": 312.7,
+   "eca_after": 448.2,
+   "largest_before": 209.4,
+   "largest_after": 418.0,
+   "networks": 56
+  }
+ },
+ "hop_m": 100.0,
+ "patch_forage_min": 0.5,
+ "pairs": 3600,
+ "median_pair_m": 642.5729530566937,
+ "flower_cells_share": 0.3176047619047619,
+ "reff_improvement": {
+  "small_03": 0.0004,
+  "small_04": 0.0004,
+  "small_05": 0.0004,
+  "small_06": 0.0004,
+  "small_07": 0.0004,
+  "small_08": 0.0004,
+  "small_09": 0.0004,
+  "bumble_03": 0.0007,
+  "bumble_04": 0.0007,
+  "bumble_05": 0.0007,
+  "bumble_06": 0.0007,
+  "bumble_07": 0.0007,
+  "bumble_08": 0.0007,
+  "bumble_09": 0.0007
+ },
+ "reff_improvement_near_stops": 0.001748012606336724,
+ "n_near": 1170,
+ "hex": 17825,
+ "hex_with_obs": 5223,
+ "hex_obs_in_highways": 0.3403880070546737,
+ "hex_obs_elsewhere": 0.2818415031546835,
+ "bbox": [
+  [
+   13.37443,
+   52.43801
+  ],
+  [
+   13.4755,
+   52.49331
+  ]
+ ]
+}

@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bee Highways · Berlin</title>
+<meta name="description" content="Where do Berlin's wild bees find flowers, where are the gaps between them, and which 25 flowering bus stops would close them? A 3D honeycomb over Tempelhofer Feld, Hasenheide and Neukölln.">
+<meta property="og:title" content="Bee highways: the missing links">
+<meta property="og:description" content="Where do Berlin's wild bees find flowers, where are the gaps between them, and which 25 flowering bus stops would close them? A 3D honeycomb over Tempelhofer Feld, Hasenheide and Neukölln.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+<link href="style.css?v=1" rel="stylesheet">
+</head>
+<body>
+<div class="app">
+  <main class="mapwrap">
+    <div id="map"></div>
+    <div class="card mapbar">
+      <button class="pill" data-view="all">Pilot area</button><button class="pill" data-view="feld">Tempelhofer Feld</button>
+      <button class="pill" data-view="hasen">Hasenheide</button><button class="pill" data-view="top">Top view</button>
+      <a class="pill lang" href="tr.html">TR</a>
+    </div>
+    <div class="card legend">
+      <h4>How to read the honeycomb</h4>
+      <div class="lg"><svg width="46" height="18" viewBox="0 0 46 18"><polygon points="4,9 6.5,4.7 11.5,4.7 14,9 11.5,13.3 6.5,13.3" fill="#e8b03c"/><polygon points="18,9 22,2 30,2 34,9 30,16 22,16" fill="#e8b03c"/></svg><span>Cell size: how much bee traffic passes (circuit model)</span></div>
+      <div class="lg"><i class="ramp"></i><span>Cell colour: wild-bee records within 120 m</span></div>
+      <div class="tk mono"><span>none</span><span>many</span></div>
+      <div class="lg"><svg width="46" height="18" viewBox="0 0 46 18"><polygon points="15,9 19,2 27,2 31,9 27,16 19,16" fill="none" stroke="#8a7ac4" stroke-width="2"/></svg><span>Violet outline: missing link, bee paths cross poor ground</span></div>
+      <div class="lg"><svg width="46" height="18" viewBox="0 0 46 18"><polygon points="15,9 19,2 27,2 31,9 27,16 19,16" fill="#8a7ac4"/></svg><span>Violet cell (+ 25 bee stops): newly joined to the largest flower network</span></div>
+      <div class="lg"><i class="sw" style="background:linear-gradient(90deg,#e8e4dc,#d8e0bb,#93bb72)"></i><span>Ground: flowers for bees</span></div>
+      <div class="lg"><i class="dot" style="background:#ecba46"></i><span>honey = in flower and good for bees</span></div>
+    </div>
+    <div id="load" class="loading">Counting flowers…</div>
+  </main>
+  <aside class="panel card">
+    <p class="eyebrow">#30DayMapChallenge · Day 20 · Hexagons · Berlin</p>
+    <h1>Bee highways: the missing links</h1>
+    <p class="lede">Between Tempelhofer Feld, Hasenheide and Neukölln, every flower patch, lime tree and garden is on this map. The <b>honeycomb floating above the city</b> shows where wild bees can travel from flower to flower: <b>bigger cells, stronger links</b>. Darker honey means more wild bees have actually been recorded there.</p>
+    <div class="stats">
+      <div class="st"><b class="mono">762</b><span>ha: the largest flower network a small wild bee can use in July, up from 312 ha with 25 bee stops</span></div>
+      <div class="st"><b class="mono">1,058</b><span>wild-bee records in the pilot area, 103 taxa (iNaturalist + GBIF, no honey bee)</span></div>
+      <div class="st"><b class="mono">60,411</b><span>lime, maple, black locust and other trees mapped one by one (60,411 in total)</span></div>
+    </div>
+    <section class="block" id="detail" hidden></section>
+    <section class="block">
+      <h2 class="label">Which bee?</h2>
+      <div class="seg" id="guild"><button data-g="small" class="on">Small solitary bee<em>hops ≤ 100 m, forages ~300 m</em></button><button data-g="bumble">Bumblebee<em>forages ~1 km</em></button></div>
+      <div class="sl"><span>Month</span><input type="range" id="month" min="3" max="9" step="1" value="7"><b id="monthV">July</b></div>
+      <div class="seg" id="ba"><button data-a="0" class="on">Today</button><button data-a="1">+ 25 bee stops</button></div>
+      <div id="isl"></div>
+    </section>
+    <section class="block">
+      <h2 class="label">Layers</h2>
+      <div class="toggles">
+        <label><input type="checkbox" id="t_hex" checked><span>Honeycomb</span><em>size = link strength · colour = bee records</em></label>
+        <label><input type="checkbox" id="t_trees" checked><span>Trees (3D)</span><em>honey = in flower and good for bees</em></label>
+        <label><input type="checkbox" id="t_ground" checked><span>Ground: flowers for bees</span><em>Berlin biotope map 2024</em></label>
+        <label><input type="checkbox" id="t_bld" checked><span>Buildings</span><em>OSM</em></label>
+        <label><input type="checkbox" id="t_obs" checked><span>Wild-bee records</span><em>iNaturalist, GBIF</em></label>
+        <label><input type="checkbox" id="t_stops" checked><span>Bee stops</span><em>25 proposed flowering stops</em></label>
+      </div>
+      <div class="sl"><span>Height</span><input type="range" id="lift" min="20" max="160" step="5" value="70"><b id="liftV">70 m</b></div>
+      <div class="sl"><span>Opacity</span><input type="range" id="hop" min="0.2" max="1" step="0.02" value="0.62"><b id="hopV">62%</b></div>
+    </section>
+    <section class="block">
+      <h2 class="label">25 bee stops</h2>
+      <ol class="stops" id="stops"></ol>
+      <p class="hint">Bus and tram stops where a 30 m × 30 m flower bed would join the most flower networks for small bees (greedy, April–September). Click to fly there.</p>
+    </section>
+    <details class="howto" open><summary>How to read this map</summary><ol><li>The <b>ground</b> is the Berlin biotope map: the greener, the more flowers for bees. Streets and roofs are pale.</li><li><b>Trees</b> are drawn one by one from the street and park tree register. They turn <b>honey-coloured</b> in the months they flower, if they are good for bees (lime in June–July, black locust in May, maple in April …).</li><li>The <b>honeycomb</b> floats above the city. Each cell is 30 m wide. <b>Size</b> shows how much bee traffic the model sends through it; <b>colour</b> shows how many wild bees people have actually recorded nearby. Big pale cells: likely highways nobody has checked. Violet rings: the missing links.</li><li>Switch the <b>bee</b>, the <b>month</b> and <b>today / + 25 bee stops</b> to see the network change.</li></ol></details>
+    <details class="howto"><summary>Method</summary><p><b>Flowers and nests.</b> Every one of the 1,675 biotope types gets a forage and a nesting score (0–1) and its flowering months, starting from a pre-classification and adding the urban types (green courtyards, allotments, railway land, streets). Street and park trees add flowers by genus and month (bee-forage lists). Sealed ground (Berlin sealing map 2021) and buildings (OSM) remove nesting ground.</p><p><b>Links.</b> The 10 m grid becomes a network of resistors: sealed ground, tall buildings and cells without flowers slow a bee down. 3,600 pairs of flower-rich cells are connected one at a time and the current through every cell is summed (circuit theory, as in Circuitscape). Each pair counts as much as both ends flower that month and as the bee's range allows (300 m for small solitary bees, 1 km for bumblebees).</p><p><b>Bee stops.</b> For small bees, flower patches whose gap is 100 m or less form one network. Each candidate bus or tram stop gets a 30 m × 30 m flower bed (April–September); the 25 that join the most network area are chosen one by one (equivalent connected area). The circuit model is then run again with them.</p></details>
+    <details class="howto"><summary>Limits</summary><p>This is a <b>model of potential</b>, not measured nectar or verified flight routes. Scores are expert-style rules and need checking on the ground. Wild bees differ by species: some need one plant, some sand, some dead wood.</p><p>No record does not mean no bees: records cluster where people walk (parks, Tempelhofer Feld). Locations accurate to 100 m or better only; obscured records and the honey bee are left out. Records without an open licence are counted but not shown as points.</p></details>
+    <details class="howto"><summary>Sources</summary><ol class="refs"><li>Biotoptypen 2024, Versiegelung 2021, Baumbestand (Straßen- und Anlagenbäume), Grünanlagen: Senatsverwaltung für Mobilität, Verkehr, Klimaschutz und Umwelt Berlin, Geoportal Berlin (dl-de/zero-2-0).</li><li>Wild-bee observations: iNaturalist (Anthophila, Berlin, export 17 Nov 2026), licences per record; GBIF.org (17 Nov 2026) occurrence download <a href="https://doi.org/10.15468/dl.w965pw">doi:10.15468/dl.w965pw</a>, CC BY-NC 4.0.</li><li>Buildings and stops: © OpenStreetMap contributors, ODbL. Basemap © CARTO.</li><li>Method: McRae, B. H. et al. (2008) Using circuit theory to model connectivity in ecology, evolution, and conservation. Ecology 89: 2712–2724. Saura, S. et al. (2011) Network analysis to assess landscape connectivity trends. Ecol. Indicators 11: 407–416.</li></ol></details>
+    <footer class="foot"><p>Barış Parlatangiller · <a href="https://barisparlatangiller.github.io/">all 30 maps</a> · <a href="https://github.com/barisparlatangiller/30DMC26-D20-Hexagons-Berlin-Bee-Highways">code &amp; method</a> · built with AI assistance (Claude, Anthropic)</p></footer>
+  </aside>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/deck.gl@9.0.38/dist.min.js"></script>
+<script src="app.js?v=1"></script>
+</body>
+</html>
