@@ -55,7 +55,7 @@ jobs:
         run: |
           set -x
           cd /tmp/f
-          curl -fsSL --retry 3 -o berlin.osm.pbf https://download.geofabrik.de/europe/germany/berlin-latest.osm.pbf
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 10 -o berlin.osm.pbf https://download.geofabrik.de/europe/germany/berlin-latest.osm.pbf || curl -fsSL --retry 3 -o berlin.osm.pbf https://download.bbbike.org/osm/bbbike/Berlin/Berlin.osm.pbf
           osmium extract -b 13.33,52.42,13.52,52.51 berlin.osm.pbf -o pilot.osm.pbf --overwrite
           osmium tags-filter pilot.osm.pbf w/building r/building -o b.osm.pbf --overwrite
           ogr2ogr -f GPKG out/osm_pilot.gpkg b.osm.pbf multipolygons -nln buildings -sql "SELECT osm_id, osm_way_id, building, other_tags FROM multipolygons WHERE building IS NOT NULL"
