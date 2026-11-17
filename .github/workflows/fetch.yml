@@ -42,9 +42,12 @@ jobs:
                           la, lo = float(row[lat]), float(row[lon])
                       except Exception:
                           continue
+                      fa = row[h.index('family')]
+                      if fa not in ('Apidae', 'Andrenidae', 'Halictidae', 'Megachilidae', 'Colletidae', 'Melittidae'):
+                          continue                                   # wild bees + honey bee only (Anthophila)
                       if 52.33 < la < 52.68 and 13.08 < lo < 13.77:
                           w.writerow([row[i] for i in ix]); m += 1
-                          fa = row[h.index('family')]; fams[fa] = fams.get(fa, 0) + 1
+                          fams[fa] = fams.get(fa, 0) + 1
           print('rows', n, 'berlin', m); print(sorted(fams.items(), key=lambda x: -x[1])[:20])
           PY
           ls -la out
@@ -66,5 +69,5 @@ jobs:
           ls -la out
       - name: Push to branch fetched
         run: |
-          cd /tmp/f/out && git init -q -b fetched && git add -A && git -c user.name=gha -c user.email=gha@users.noreply.github.com commit -qm "GBIF Berlin bees + OSM pilot"
+          cd /tmp/f/out && gzip -9 osm_pilot.gpkg && ls -la && git init -q -b fetched && git add -A && git -c user.name=gha -c user.email=gha@users.noreply.github.com commit -qm "GBIF Berlin bees + OSM pilot"
           git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" fetched:fetched 2>&1 | tail -2
