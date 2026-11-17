@@ -60,7 +60,7 @@ class View:
         return View(cx, cy, self.span * (1 - t) + o.span * t)
 
 
-FULL = View((X0 + X1) / 2, (Y0 + Y1) / 2, 7600)
+FULL = View((X0 + X1) / 2, (Y0 + Y1) / 2, 7000)
 K2 = 2
 
 
@@ -128,27 +128,36 @@ OBS = np.array(HJ["obs"]); GAP = np.array(HJ["gap"])
 HCOL = [honey(n) for n in OBS]
 
 
+GAPTHR = np.sort(GAP)[int(len(GAP) * 0.975)]
+JOINED7 = np.array(HJ["big1"]["07"]) & ~np.array(HJ["big0"]["07"]).astype(bool)
+
+
 def hex_scale(v):
-    return np.where(v < 0.02, 0, 0.14 + 0.82 * np.power(v, 1.4))
+    return np.where(v < 0.3, 0, 0.1 + 0.86 * np.power(np.clip((v - 0.3) / 0.7, 0, 1), 1.6))
 
 
-def draw_hexes(im, v, vals, lift=1.0, alpha=0.66, gaps=0.0):
+def draw_hexes(im, v, vals, lift=1.0, alpha=0.66, gaps=0.0, joined=0.0):
     """honeycomb floating above the ground: shadow offset by 'lift', cells sized by vals (0–1)"""
     ov = Image.new("RGBA", im.size, (0, 0, 0, 0)); d = ImageDraw.Draw(ov)
     sh = Image.new("RGBA", im.size, (0, 0, 0, 0)); ds = ImageDraw.Draw(sh)
     e = HJ["edge"] / v.px
-    px, py = v.xy(HX, HY)
+    px, py = v.xy(HX, HY); py = py - MAP_Y                      # drawn on the map image, not the frame
     sc = hex_scale(vals)
+    if joined > 0:
+        sc = np.where(JOINED7, np.maximum(sc, 0.62 * joined), sc)
     ang = np.arange(6) * np.pi / 3
     off = 9 * lift
-    m = (px > -20) & (px < W + 20) & (py > MAP_Y - 20) & (py < MAP_Y + MAP_H + 20) & (sc > 0)
+    m = (px > -20) & (px < W + 20) & (py > -20) & (py < MAP_H + 20) & (sc > 0)
     for i in np.nonzero(m)[0]:
         r = e * sc[i]
         pts = [(px[i] + r * math.cos(a), py[i] + r * math.sin(a)) for a in ang]
         ds.polygon([(x + off, y + off * 1.2) for x, y in pts], fill=(70, 60, 40, int(70 * lift)))
-        d.polygon(pts, fill=HCOL[i] + (int(255 * alpha * (0.55 + 0.45 * vals[i])),), outline=(255, 255, 255, int(110 * alpha)))
+        if joined > 0 and JOINED7[i]:
+            d.polygon(pts, fill=VIOLET + (int(235 * joined),), outline=(255, 255, 255, 140))
+        else:
+            d.polygon(pts, fill=HCOL[i] + (int(255 * alpha * (0.55 + 0.45 * vals[i])),), outline=(255, 255, 255, int(110 * alpha)))
     if gaps > 0:
-        for i in np.nonzero((GAP >= 0.35) & (px > 0) & (px < W) & (py > MAP_Y) & (py < MAP_Y + MAP_H))[0]:
+        for i in np.nonzero((GAP >= GAPTHR) & (px > 0) & (px < W) & (py > 0) & (py < MAP_H))[0]:
             pts = [(px[i] + e * 0.98 * math.cos(a), py[i] + e * 0.98 * math.sin(a)) for a in ang]
             d.line(pts + [pts[0]], fill=VIOLET + (int(230 * gaps),), width=2)
     sh = sh.filter(ImageFilter.GaussianBlur(2.5))
@@ -219,7 +228,7 @@ def main():
     for k in range(int(FPS * 3.6)):
         a = ease(k / (FPS * 2.2))
         img = draw_hexes(t7, FULL, vals7 * a, lift=a, alpha=0.66 * a)
-        save(compose(img, Q, "July · small solitary bees", ("The honeycomb floats above the city", "bigger cell = stronger link · darker = more bee records")))
+        save(compose(img, Q, "July · small solitary bees", ("The honeycomb floats above the city", "bigger cell = stronger link · darker honey = more bee records")))
     still = compose(draw_hexes(t7, FULL, vals7, gaps=1.0), Q, "July · small solitary bees", ("The honeycomb floats above the city", "bigger cell = stronger link · darker = more bee records"))
     still.save(OUT / "still_honeycomb.png")
     # D · months March → September (6.4 s)
@@ -239,16 +248,18 @@ def main():
                 x = W - 306 + i * 40; d.rounded_rectangle([x, MAP_Y + 124, x + 34, MAP_Y + 132], 3, fill=HONEY_ACC if m <= mm else (226, 220, 208))
         save(compose(draw_hexes(tm, FULL, vals), Q, "March to September · small solitary bees", ("The network grows with the flowers", "willow in March, maple in April, lime in July"), overlay=ov))
     # E · bee stops (4.8 s): zoom to the gaps, stops appear, cells grow
-    gx = HX[GAP >= 0.35].mean() if (GAP >= 0.35).any() else (X0 + X1) / 2
-    gy = HY[GAP >= 0.35].mean() if (GAP >= 0.35).any() else (Y0 + Y1) / 2
-    ZV = View(0.5 * gx + 0.5 * SX_.mean(), 0.5 * gy + 0.5 * SY_.mean(), 4200)
+    gx = HX[JOINED7].mean(); gy = HY[JOINED7].mean()
+    zs = 4600; zh = zs * MAP_H / W; fh = FULL.span * MAP_H / W
+    zx = min(max(0.5 * gx + 0.5 * SX_.mean(), FULL.x0 + zs / 2 + 1), FULL.x0 + FULL.span - zs / 2 - 1)
+    zy = min(max(0.5 * gy + 0.5 * SY_.mean(), FULL.y1 - fh + zh / 2 + 1), FULL.y1 - zh / 2 - 1)
+    ZV = View(zx, zy, zs)
     big7 = T[7]
     NE = int(FPS * 4.8); i7 = I["07"]
     for k in range(NE):
         u = ease(k / (FPS * 1.6)); v = FULL.lerp(ZV, u)
         a = ease((k - FPS * 1.6) / (FPS * 1.8))
         vals = HV[:, col("small", 7, False)] * (1 - a) + HV[:, col("small", 7, True)] * a
-        img = draw_hexes(crop(big7, v), v, vals, gaps=1.0 - a * 0.6)
+        img = draw_hexes(crop(big7, v), v, vals, gaps=1.0 - a * 0.6, joined=max(0.0, a))
         def ov(d, v=v, a=a, k=k):
             px, py = v.xy(SX_, SY_)
             for j, (x, y) in enumerate(zip(px, py)):
@@ -258,9 +269,9 @@ def main():
                     d.text((x, y), str(ch[j]["rank"]), font=F["lab"], fill=(255, 255, 255), anchor="mm")
             la = i7["largest_before"] + (i7["largest_after"] - i7["largest_before"]) * max(0, a)
             badge(d, W - 340, MAP_Y + 24, f"{la:.0f} ha", "largest flower network")
-        save(compose(img, Q, "July · + 25 bee stops", ("25 flowering bus and tram stops", "join the flower islands of small bees"), v=v, labels=1 - u * 0.5, overlay=ov))
+        save(compose(img, Q, "July · + 25 bee stops", ("25 flowering bus and tram stops", "violet: newly joined to the largest flower network"), v=v, labels=1 - u * 0.5, overlay=ov))
     final = img
-    compose(final, Q, "July · + 25 bee stops", ("25 flowering bus and tram stops", "join the flower islands of small bees"), v=ZV, labels=0.5, overlay=ov).save(OUT / "still_stops.png")
+    compose(final, Q, "July · + 25 bee stops", ("25 flowering bus and tram stops", "violet: newly joined to the largest flower network"), v=ZV, labels=0.5, overlay=ov).save(OUT / "still_stops.png")
     # F · outro (4.2 s)
     for k in range(int(FPS * 4.2)):
         a = ease(k / (FPS * 0.6))
