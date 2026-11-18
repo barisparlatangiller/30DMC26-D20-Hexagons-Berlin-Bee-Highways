@@ -118,7 +118,14 @@ def main():
     bt = gpd.read_parquet(B / "biotopes.parquet")
     bt = bt[~bt.geometry.is_empty]
     bt["geometry"] = bt.geometry.simplify(0.6)
-    wgs(bt)[["bt_name", "forage", "nest", "rule", "geometry"]].to_file(W / "biotopes.json", driver="GeoJSON")
+    CAT = {"dry grassland / heath": "meadow", "ruderal / tall herbs": "meadow", "meadow": "meadow", "railway land": "meadow", "construction land (often ruderal)": "meadow",
+           "part-sealed with joint vegetation": "meadow", "meadow / dry grassland (pre-class.)": "meadow", "herb-rich (pre-class.)": "meadow", "intensive grassland": "lawn", "mown lawn": "lawn",
+           "mown (pre-class.)": "lawn", "allotments": "garden", "gardens": "garden", "houses with gardens": "garden", "small houses with gardens": "garden", "garden (pre-class.)": "garden",
+           "orchard": "garden", "park": "park", "cemetery": "park", "shrubs / hedges": "park", "woodland": "park", "pine forest": "park", "black-locust stand": "park",
+           "trees / shrubs (pre-class.)": "park", "blocks with green courtyards": "yard", "slab / tower blocks with green": "yard"}
+    bt["cat"] = bt.rule.map(CAT)
+    bt["cat"] = bt.cat.where(bt.cat.notna(), np.where(bt.rule.str.startswith("water"), "water", "built"))
+    wgs(bt)[["bt_name", "forage", "nest", "rule", "cat", "geometry"]].to_file(W / "biotopes.json", driver="GeoJSON")
     bl = gpd.read_parquet(B / "buildings.parquet"); bl["geometry"] = bl.geometry.simplify(0.4)
     b2 = wgs(bl)[["h", "geometry"]]; b2["h"] = b2.h.round(1)
     b2.to_file(W / "buildings.json", driver="GeoJSON")
@@ -136,8 +143,10 @@ def main():
     (W / "stops.json").write_text(json.dumps([{"n": r.name, "lon": round(r.geometry.x, 6), "lat": round(r.geometry.y, 6), "rank": int(r["rank"])} for _, r in st.iterrows()], ensure_ascii=False))
     ob = obs.to_crs(4326)
     show = ~ob.license.str.contains("all rights", case=False, na=True)
-    (W / "obs.json").write_text(json.dumps([{"t": r.taxon, "d": str(r.date)[:10], "s": r.src, "lon": round(r.geometry.x, 6), "lat": round(r.geometry.y, 6), "u": r.url if s else ""}
-                                           for (_, r), s in zip(ob.iterrows(), show)], ensure_ascii=False, separators=(",", ":")))
+    oc = ((obs.geometry.x - X0) / RES).astype(int).clip(0, NX - 1).values; orr = ((Y1 - obs.geometry.y) / RES).astype(int).clip(0, NY - 1).values
+    hidden = fmax[orr, oc] < 0.35                                          # bee seen where the biotope map shows few flowers
+    (W / "obs.json").write_text(json.dumps([{"t": r.taxon, "d": str(r.date)[:10], "s": r.src, "lon": round(r.geometry.x, 6), "lat": round(r.geometry.y, 6), "u": r.url if s else "", "h": int(hd)}
+                                           for (_, r), s, hd in zip(ob.iterrows(), show, hidden)], ensure_ascii=False, separators=(",", ":")))
     # ---- stats
     sc = list(cur["scen"])
     top_hex_obs = int((ocnt > 0).sum())
