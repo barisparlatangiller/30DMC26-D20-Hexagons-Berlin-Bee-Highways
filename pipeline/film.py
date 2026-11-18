@@ -242,6 +242,22 @@ def draw_highways(im, v, key, t, alpha=1.0, bees=True):
     return im
 
 
+def draw_corridors(im, v, combo, key, beds_xy, alpha=1.0, t=0.0):
+    """corridors with the additions: new ones near the beds in violet, with bees"""
+    CORR = draw_corridors.__dict__.setdefault("C", json.loads((D / "corridors.json").read_text()))
+    d = ImageDraw.Draw(im, "RGBA")
+    bx, by = (np.array([b[0] for b in beds_xy]), np.array([b[1] for b in beds_xy])) if beds_xy else (np.zeros(0), np.zeros(0))
+    for h in CORR[combo][key]:
+        x, y = _t.transform(np.array([q[0] for q in h["p"]]), np.array([q[1] for q in h["p"]]))
+        new = h["n"] and len(bx) and np.min(np.hypot(x[:, None] - bx[None], y[:, None] - by[None])) < 300
+        px, py = v.xy(x, y); py = py - MAP_Y
+        if new:
+            d.line(list(zip(px, py)), fill=(124, 104, 196, int(240 * alpha)), width=max(4, int(4 + 6 * h["s"])), joint="curve")
+        else:
+            d.line(list(zip(px, py)), fill=(150, 88, 14, int((90 + 90 * h["s"]) * 0.6)), width=max(2, int(2 + 5 * h["s"])), joint="curve")
+    return im
+
+
 def icon(d, x, y, kind, r=13, a=255):
     c = KCOL[kind]
     d.ellipse([x - r, y - r, x + r, y + r], fill=c + (a,), outline=(255, 255, 255, a), width=3)
@@ -326,15 +342,16 @@ def main():
         T += 1 / FPS
         nk = min(25, int(25 * ease(k / (FPS * 4.6))))
         st = islands_state(m, picks[:nk])
-        img = draw_highways(draw_islands(t7.copy(), FULL, m, st, alpha=0.82), FULL, "small_07", T, alpha=0.35, bees=False)
+        img = draw_islands(t7.copy(), FULL, m, st, alpha=0.82)
+        img = draw_corridors(img, FULL, "treepits", "small_07", list(zip(PX[:nk], PY[:nk])), alpha=min(1.0, nk / 12), t=T)
         val = st[1][st[2]]
         def ov(d, nk=nk, val=val):
             px, py = FULL.xy(PX[:nk], PY[:nk])
             for x, y in zip(px, py):
                 icon(d, x, y, "treepits", 12)
             badge(d, f"{val:.0f} ha", f"largest network · {nk} tree pits", col=(79, 143, 90))
-        save(compose(img, "What if 25 tree pits flower?", "July · a 30 m × 30 m flower bed at each", ("Street trees stand in the gaps", f"{b7:.0f} ha → {tp7:.0f} ha largest network"), overlay=ov))
-    final = compose(img, "What if 25 tree pits flower?", "July · a 30 m × 30 m flower bed at each", ("Street trees stand in the gaps", f"{b7:.0f} ha → {tp7:.0f} ha largest network"), overlay=ov)
+        save(compose(img, "What if 25 tree pits flower?", "July · a 30 m × 30 m flower bed at each", ("Islands join, new corridors grow (violet)", f"{b7:.0f} ha → {tp7:.0f} ha largest network"), overlay=ov))
+    final = compose(img, "What if 25 tree pits flower?", "July · a 30 m × 30 m flower bed at each", ("Islands join, new corridors grow (violet)", f"{b7:.0f} ha → {tp7:.0f} ha largest network"), overlay=ov)
     final.save(OUT / "still_treepits.png"); last = img
     # F · outro (4.4 s)
     for k in range(int(FPS * 4.4)):

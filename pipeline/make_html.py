@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 
-V = "4"
+V = "5"
 ST = json.loads(Path("docs/data/stats.json").read_text())
 C = ST["combos"]
 

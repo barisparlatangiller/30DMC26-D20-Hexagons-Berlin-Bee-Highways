@@ -30,12 +30,23 @@ const S = { month: 7, guild: "small", add: { stops: false, treepits: false, scho
   flowers: { meadow: true, garden: true, park: true, yard: true, lawn: true }, focus: -1, t: 0, story: !FILM && !Q.has("explore") };
 window.S = S;
 
-let map, overlay, H, HISL, IV, HW, TREES, TMETA, OBS, ST;
+let map, overlay, H, HISL, IV, HW, TREES, TMETA, OBS, ST, CORR, CTX;
+// highways for the current guild × month and the current additions (corridors.json), else the base highways
+const HWC = {};
+function hwLines(key) { const c = ["stops", "treepits", "schools", "parking"].filter(k => S.add[k]).join("+") || "none";
+  if (!(CORR && CORR[c] && CORR[c][key])) return { id: "base" + key, lines: HW[key] || [] };
+  const id = c + key; if (HWC[id]) return HWC[id];
+  // a corridor counts as new only where it grows out of an added flower bed (within 300 m)
+  const beds = []; for (const k in IV.picks) if (S.add[k]) for (const p of IV.picks[k]) beds.push([p.lon, p.lat]);
+  const near = q => beds.some(b => Math.hypot((q[0] - b[0]) * 68000, (q[1] - b[1]) * 111000) < 300);
+  const lines = CORR[c][key].map(l => ({ ...l, n: l.n && l.p.some(near) ? 1 : 0 }));
+  return (HWC[id] = { id, lines }); }
 const MI = () => S.month - 4;                                  // month index in hexisl / interventions (April–September)
 
 async function load() {
   const j = u => fetch(u).then(r => r.json());
   [H, ST, TMETA, OBS, IV, HW] = await Promise.all([j("data/hex.json"), j("data/stats.json"), j("data/trees_meta.json"), j("data/obs.json"), j("data/interventions.json"), j("data/highways.json")]);
+  [CORR, CTX] = await Promise.all([j("data/corridors.json").catch(() => null), j("data/context_hex.json").catch(() => null)]);
   HISL = new Uint16Array(await fetch("data/hexisl.bin").then(r => r.arrayBuffer()));
   const tb = new Float32Array(await fetch("data/trees.bin").then(r => r.arrayBuffer())), n = tb.length / 7;
   TREES = { n, pos: new Float32Array(n * 3), sc: new Float32Array(n * 3), tpos: new Float32Array(n * 3), tsc: new Float32Array(n * 3), val: new Float32Array(n), mask: new Uint16Array(n), gen: new Uint16Array(n), crown: new Float32Array(n), h: new Float32Array(n), col: new Uint8Array(n * 4) };
@@ -103,19 +114,20 @@ const ICONS = {
 
 // ---------- trips: bees flowing along the highways ----------
 function trips(key) {
-  if (HW.trips[key]) return HW.trips[key];
+  const hl = hwLines(key);
+  if (HW.trips[hl.id]) return HW.trips[hl.id];
   const out = [], KX = 111320 * Math.cos(52.47 * Math.PI / 180), KY = 110540;
-  for (const h of HW[key] || []) {
+  for (const h of hl.lines) {
     const p = h.p, d = [0];
     for (let i = 1; i < p.length; i++) d.push(d[i - 1] + Math.hypot((p[i][0] - p[i - 1][0]) * KX, (p[i][1] - p[i - 1][1]) * KY));
     const n = 2 + Math.round(8 * h.s);
     for (let k = 0; k < n; k++) {
       const off = Math.random() * 3000, rev = k % 2 === 1;
       const path = rev ? [...p].reverse() : p, dd = rev ? d.map(x => d[d.length - 1] - x).reverse() : d;
-      out.push({ path: path.map(q => [q[0], q[1], 7 + 5 * Math.random()]), ts: dd.map(x => off + x), s: h.s });
+      out.push({ path: path.map(q => [q[0], q[1], 7 + 5 * Math.random()]), ts: dd.map(x => off + x), s: h.s, n: h.n });
     }
   }
-  return (HW.trips[key] = out);
+  return (HW.trips[hl.id] = out);
 }
 
 // ---------- layers ----------
@@ -128,6 +140,9 @@ function hexPoly(i) { const lon = H.lon[i], lat = H.lat[i], P = []; for (let k =
 function layers() {
   const L_ = [], z = map.getZoom(), cf = cityF(z), mi = MI(), key = `${S.guild}_${String(S.month).padStart(2, "0")}`;
   network();
+  if (CTX) L_.push(new deck.PolygonLayer({ id: "ctx", data: CTX.lon.map((_, i) => i), stroked: false, pickable: false,
+    getPolygon: i => { const lon = CTX.lon[i], lat = CTX.lat[i], s = (0.35 + 0.6 * Math.min(1, CTX.f[i] / 0.7)) * CTX.edge / H.edge / 0.93, P = []; for (let k = 0; k < 6; k++) P.push([lon + H.vx[k] * s, lat + H.vy[k] * s]); return P; },
+    getFillColor: i => { const f = Math.min(1, CTX.f[i] / 0.7); return [Math.round(196 + (220 - 196) * f), Math.round(204 + (154 - 204) * f), Math.round(150 + (44 - 150) * f), Math.round(200 * CTX.fade[i] * CTX.fade[i])]; } }));
   if (S.show.islands && S.month >= 4) {
     const data = memo("isl" + mi, () => { const d = []; for (let i = 0; i < H.n; i++) if (HISL[i * 6 + mi] > 0) d.push(i); return d; });
     L_.push(new deck.PolygonLayer({ id: "islands", data, getPolygon: hexPoly, stroked: false, opacity: 0.88 - 0.38 * cf,
@@ -136,11 +151,17 @@ function layers() {
       pickable: true, updateTriggers: { getFillColor: [mi, JSON.stringify(S.add), S.focus] } }));
   }
   if (S.show.highways) {
-    L_.push(new deck.PathLayer({ id: "highways", data: HW[key] || [], getPath: d => d.p, getWidth: d => 5 + 16 * d.s, widthUnits: "meters", widthMinPixels: 1.5, widthMaxPixels: 14, capRounded: true, jointRounded: true,
-      getColor: d => [150, 88, 14, Math.round(120 + 110 * d.s)], opacity: 0.85, updateTriggers: {} }));
-    if (S.show.flow) L_.push(new deck.TripsLayer({ id: "flow", data: trips(key), getPath: d => d.path, getTimestamps: d => d.ts, getColor: [255, 238, 176], widthMinPixels: 3, widthUnits: "meters",
+    const hl = hwLines(key);
+    // new corridors (only with the additions) in violet, like the bridges
+    L_.push(new deck.PathLayer({ id: "highways", data: hl.lines, getPath: d => d.p, getWidth: d => d.n ? 14 + 10 * d.s : 5 + 16 * d.s, widthUnits: "meters", widthMinPixels: 1.5, widthMaxPixels: 14, capRounded: true, jointRounded: true,
+      getColor: d => d.n ? [124, 104, 196, 235] : [150, 88, 14, Math.round(120 + 110 * d.s)], opacity: 0.88, pickable: true, updateTriggers: { getColor: hl.id, getWidth: hl.id } }));
+    if (S.show.flow) L_.push(new deck.TripsLayer({ id: "flow", data: trips(key), getPath: d => d.path, getTimestamps: d => d.ts, getColor: d => d.n ? [236, 228, 255] : [255, 238, 176], widthMinPixels: 3, widthUnits: "meters",
       getWidth: 4, trailLength: 140, currentTime: S.t % 3600, fadeTrail: true, capRounded: true, jointRounded: true, shadowEnabled: false }));
   }
+  // the added flower beds become flower hexagons themselves
+  if (S.month >= 4) { const bd = memo(`bd${JSON.stringify(S.add)}`, () => { const o = []; for (const k in IV.picks) if (S.add[k]) for (const p of IV.picks[k]) o.push({ ...p, k }); return o; });
+    L_.push(new deck.PolygonLayer({ id: "beds", data: bd, getPolygon: d => { const P = []; for (let k = 0; k < 6; k++) P.push([d.lon + H.vx[k], d.lat + H.vy[k]]); return P; },
+      getFillColor: [...HONEY, 255], getLineColor: d => [...KINDS[d.k].c, 255], getLineWidth: 3, lineWidthUnits: "pixels", stroked: true })); }
   // possible bridges (thin) and built ones (strong), from every chosen place to the islands it joins
   if (S.show.bridges && S.month >= 4) {
     const m = IV.months[mi], seg = memo(`br${mi}${JSON.stringify(S.add)}${S.show.adds}`, () => { const o = [];
@@ -181,6 +202,7 @@ function tip({ layer, object, index }) {
     return { text: `${de || g} (${g})\n${L("for bees", "arılar için")}: ${v >= 0.7 ? L("very good", "çok iyi") : v >= 0.4 ? L("good", "iyi") : v >= 0.2 ? L("some", "biraz") : L("little", "az")}${mon.length ? ` · ${L("flowers", "çiçek")} ${mon[0]}${mon.length > 1 ? "–" + mon[mon.length - 1] : ""}` : ""}`, style: st }; }
   if (layer.id === "obs" && object) return { text: `${object.t}\n${object.d} · ${object.s}${object.h ? "\n" + L("Seen where the biotope map shows few flowers", "Biyotop haritasının az çiçek gösterdiği yerde görüldü") : ""}`, style: st };
   if (layer.id === "adds" && object) return { text: `${L(KINDS[object.k].en, KINDS[object.k].tr)} · ${object.rank}\n${object.name || ""}\n${L("A 30 m × 30 m flower bed here joins", "Buraya 30 m × 30 m'lik bir çiçek yatağı")} ${object.reach[IV.months[MI()]].length} ${L("flower islands", "çiçek adasını birleştirir")}`, style: st };
+  if (layer.id === "highways" && object && object.n) return { text: L("New corridor: only exists with the added flowers", "Yeni koridor: yalnızca eklenen çiçeklerle oluşuyor"), style: st };
   if (layer.id === "highways" && object) return { text: `${L("Bee highway", "Arı otoyolu")}: ${object.s >= 0.6 ? L("very busy", "çok yoğun") : object.s >= 0.35 ? L("busy", "yoğun") : L("used", "kullanılıyor")}\n${L("Where the model sends the most flower-to-flower trips", "Modelin en çok çiçekten çiçeğe yolculuğu geçirdiği yer")}`, style: st };
   return null;
 }
@@ -193,7 +215,9 @@ function ground() {
   map.addLayer({ id: "bio-line", type: "line", source: "bio", minzoom: 15, paint: { "line-color": "#ffffff", "line-width": 0.6, "line-opacity": 0.7 } });
   const bb = ST.bbox;
   map.addSource("pilot", { type: "geojson", data: { type: "Feature", geometry: { type: "Polygon", coordinates: [[[bb[0][0], bb[0][1]], [bb[1][0], bb[0][1]], [bb[1][0], bb[1][1]], [bb[0][0], bb[1][1]], [bb[0][0], bb[0][1]]]] } } });
-  map.addLayer({ id: "pilot-line", type: "line", source: "pilot", paint: { "line-color": "#8a7ac4", "line-width": 1.2, "line-dasharray": [3, 2] } });
+  // a soft edge: the same flowers in a 2 km ring, fading out (no hard cut at the pilot rectangle)
+  map.addSource("ctxbio", { type: "geojson", data: "data/context_biotopes.json" });
+  map.addLayer({ id: "ctxbio", type: "fill", source: "ctxbio", paint: { "fill-color": colour, "fill-opacity": ["*", ["get", "fade"], 0.85] } }, "bio");
   map.addSource("bld", { type: "geojson", data: "data/buildings.json" });
   map.addLayer({ id: "bld-flat", type: "fill", source: "bld", maxzoom: Z[1], paint: { "fill-color": "#e4dfd5", "fill-opacity": 0.7 } });
   map.addLayer({ id: "bld", type: "fill-extrusion", source: "bld", minzoom: Z[0], paint: { "fill-extrusion-color": "#efeae1", "fill-extrusion-height": ["interpolate", ["linear"], ["zoom"], Z[0], 0, Z[1], ["get", "h"]], "fill-extrusion-opacity": 0.86, "fill-extrusion-vertical-gradient": true } });
@@ -251,7 +275,7 @@ const stopFlight = () => { flight = null; };
 // ---------- story ----------
 function bestPath(key, near) {
   let best = null, bs = -1;
-  for (const h of HW[key] || []) { const m = h.p[Math.floor(h.p.length / 2)]; const d = Math.hypot(m[0] - near[0], (m[1] - near[1]) * 1.6);
+  for (const h of hwLines(key).lines) { const m = h.p[Math.floor(h.p.length / 2)]; const d = Math.hypot(m[0] - near[0], (m[1] - near[1]) * 1.6);
     const sc = h.len * (0.4 + h.s) / (1 + d * 3000); if (sc > bs) { bs = sc; best = h; } }
   return best ? best.p : null;
 }
@@ -286,11 +310,11 @@ function steps() {
       cam: VIEW.south, set: { islands: true, highways: false, bridges: true, adds: true } },
     { kick: L("6 · What if: bus stops", "6 · Ya olursa: otobüs durakları"), title: L(`25 flowering stops: ${fmt(b7)} → ${fmt(c.stops["07"])} ha.`, `25 çiçekli durak: ${fmt(b7)} → ${fmt(c.stops["07"])} ha.`), key: "adds",
       text: L("A nice idea, but stops are often on wide, sealed streets: they join only a few islands.", "Güzel bir fikir, ama duraklar çoğu zaman geniş ve kaplı caddelerde: yalnızca birkaç adayı birleştiriyorlar."),
-      cam: VIEW.city, set: { islands: true, highways: false, bridges: true, adds: false }, add: { stops: true } },
+      cam: VIEW.city, set: { islands: true, highways: true, flow: true, bridges: true, adds: false }, add: { stops: true } },
     { kick: L("7 · What if: tree pits", "7 · Ya olursa: ağaç dipleri"), title: L(`25 tree pits in flower: ${fmt(b7)} → ${fmt(c.treepits["07"])} ha.`, `Çiçekli 25 ağaç dibi: ${fmt(b7)} → ${fmt(c.treepits["07"])} ha.`), key: "adds",
-      text: L("Street trees stand right in the gaps between courtyards and parks. Planting the soil around 25 of them joins the honey network across Neukölln.",
-        "Sokak ağaçları tam avlular ve parklar arasındaki boşluklarda duruyor. 25 tanesinin dibindeki toprağı çiçeklendirmek bal rengi ağı Neukölln boyunca birleştiriyor."),
-      cam: VIEW.city, set: { islands: true, highways: false, bridges: true, adds: false }, add: { treepits: true } },
+      text: L("Street trees stand right in the gaps between courtyards and parks. Planting the soil around 25 of them joins the honey network across Neukölln, and new corridors (violet) grow out of the beds.",
+        "Sokak ağaçları tam avlular ve parklar arasındaki boşluklarda duruyor. 25 tanesinin dibindeki toprağı çiçeklendirmek bal rengi ağı Neukölln boyunca birleştiriyor ve yataklardan yeni koridorlar (mor) uzanıyor."),
+      cam: VIEW.city, set: { islands: true, highways: true, flow: true, bridges: true, adds: false }, add: { treepits: true } },
     { kick: L("8 · Real bees", "8 · Gerçek arılar"), title: L(`${fmt(ST.obs_pilot)} wild-bee records.`, `${fmt(ST.obs_pilot)} yabani arı kaydı.`), key: "records",
       text: L(`${fmt(Math.round(obsH / ST.obs_pilot * 100))}% of them (white) are where the biotope map shows few flowers: balconies, front gardens, tree pits. The map misses the small flowers; the bees don't.`,
         `Bunların %${fmt(Math.round(obsH / ST.obs_pilot * 100))}'si (beyaz) biyotop haritasının az çiçek gösterdiği yerlerde: balkonlar, ön bahçeler, ağaç dipleri. Harita küçük çiçekleri kaçırıyor; arılar kaçırmıyor.`),
@@ -306,7 +330,7 @@ const KEYS = {
   flow: () => `<span><i style="background:#96580e;height:5px;width:18px;border-radius:3px"></i>${L("bee highway", "arı otoyolu")}</span><span><i style="background:#ffeca8;height:4px;width:18px;border-radius:3px;box-shadow:0 0 0 1px #d9a640"></i>${L("bees moving", "hareket eden arılar")}</span>`,
   islands: () => `<span><i style="background:rgb(${HONEY})"></i>${L("largest network", "en büyük ağ")}</span><span><i style="background:rgb(${PAL[0]})"></i><i style="background:rgb(${PAL[1]});margin-left:-4px"></i>${L("separate islands", "ayrı adalar")}</span>`,
   bridges: () => Object.values(KINDS).map(v => `<span><img src="${ICONS[v.ic](v.c.join(","))}" alt="">${L(v.en, v.tr)}</span>`).join(""),
-  adds: () => `<span><i style="background:rgb(${HONEY})"></i>${L("largest network", "en büyük ağ")}</span><span><i style="background:#8a7ac4;height:4px;width:18px;border-radius:2px"></i>${L("new bridge", "yeni köprü")}</span>`,
+  adds: () => `<span><i style="background:rgb(${HONEY})"></i>${L("largest network", "en büyük ağ")}</span><span><i style="background:#7c68c4;height:5px;width:18px;border-radius:3px"></i>${L("new corridor", "yeni koridor")}</span><span><i style="background:#96580e;height:5px;width:18px;border-radius:3px"></i>${L("bee highway", "arı otoyolu")}</span>`,
   records: () => `<span><i style="background:#3c2c18;border-radius:50%"></i>${L("record where the map shows flowers", "haritanın çiçek gösterdiği yerde kayıt")}</span><span><i style="background:#fff;border-radius:50%;box-shadow:0 0 0 2px #c45c3c"></i>${L("record where the map shows few flowers", "haritanın az çiçek gösterdiği yerde kayıt")}</span>`,
 };
 let STEPS, cur = -1;
