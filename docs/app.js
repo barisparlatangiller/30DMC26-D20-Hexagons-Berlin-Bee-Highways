@@ -8,7 +8,7 @@ const Q = new URLSearchParams(location.search);
 const FILM = Q.has("film");
 const MONTHS = TR ? ["", "Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"] : ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const MONTHS_L = TR ? ["", "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"] : ["", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-const S = { guild: "small", month: 7, after: false, lift: 70, hexOp: 0.62, show: { hex: true, trees: true, bld: true, obs: true, stops: true, ground: true }, sel: null };
+const S = { guild: "small", month: 7, after: false, hexOp: 0.85, show: { hex: true, trees: true, bld: true, obs: true, stops: true, ground: true }, sel: null };
 window.S = S;
 
 // palette: warm paper, greens for forage, honey for bees, violet for gaps
@@ -29,13 +29,16 @@ async function load() {
   [H, ST, TMETA, STOPS, OBS] = await Promise.all([j("data/hex.json"), j("data/stats.json"), j("data/trees_meta.json"), j("data/stops.json"), j("data/obs.json")]);
   HV = new Uint8Array(await fetch("data/hexv.bin").then(r => r.arrayBuffer()));
   const tb = new Float32Array(await fetch("data/trees.bin").then(r => r.arrayBuffer())); const n = tb.length / 7;
-  TREES = { n, pos: new Float32Array(n * 3), sc: new Float32Array(n * 3), val: new Float32Array(n), mask: new Uint16Array(n), gen: new Uint16Array(n), lon: new Float32Array(n), lat: new Float32Array(n), crown: new Float32Array(n), h: new Float32Array(n) };
+  TREES = { n, pos: new Float32Array(n * 3), sc: new Float32Array(n * 3), val: new Float32Array(n), mask: new Uint16Array(n), gen: new Uint16Array(n), lon: new Float32Array(n), lat: new Float32Array(n), crown: new Float32Array(n), h: new Float32Array(n), tpos: new Float32Array(n * 3), tsc: new Float32Array(n * 3) };
   for (let i = 0; i < n; i++) {
     const lon = tb[i * 7], lat = tb[i * 7 + 1], cr = tb[i * 7 + 2], h = tb[i * 7 + 3];
     TREES.lon[i] = lon; TREES.lat[i] = lat; TREES.crown[i] = cr; TREES.h[i] = h; TREES.val[i] = tb[i * 7 + 4]; TREES.mask[i] = tb[i * 7 + 5]; TREES.gen[i] = tb[i * 7 + 6];
     const r = cr / 2, ch = Math.max(2.5, Math.min(h * 0.6, h - 1.5));
     TREES.pos[i * 3] = lon; TREES.pos[i * 3 + 1] = lat; TREES.pos[i * 3 + 2] = h - ch / 2;
     TREES.sc[i * 3] = r; TREES.sc[i * 3 + 1] = r; TREES.sc[i * 3 + 2] = ch / 2;
+    const th = h - ch + 0.8;                                                    // trunk up into the crown
+    TREES.tpos[i * 3] = lon; TREES.tpos[i * 3 + 1] = lat; TREES.tpos[i * 3 + 2] = th / 2;
+    TREES.tsc[i * 3] = Math.max(0.15, Math.min(0.5, 0.05 * cr + 0.08)); TREES.tsc[i * 3 + 2] = th / 2;
   }
   TREES.col = new Uint8Array(n * 4);
   // hex geometry helpers (flat-top hex, edge in metres → degrees)
@@ -62,46 +65,59 @@ const SPHERE = (() => { const P = [], Nn = [], I = [], LA = 6, LO = 10;
   for (let a = 0; a < LA; a++) for (let o = 0; o < LO; o++) { const p = a * (LO + 1) + o, q = p + LO + 1; I.push(p, q, p + 1, q, q + 1, p + 1); }
   return { attributes: { positions: { value: new Float32Array(P), size: 3 }, normals: { value: new Float32Array(Nn), size: 3 } }, indices: { value: new Uint16Array(I), size: 1 } }; })();
 
+// two scales: zoomed out the honeycomb lies flat on the ground as a heat map of bee links; zoomed in it fades away and
+// the detailed city (every tree with its trunk, every building, every biotope) takes over
+const Z_HEX = [14.4, 15.3];                       // hex opacity 1 → 0 between these zooms
+const HEAT = [[0.3, [247, 236, 210]], [0.55, [241, 204, 110]], [0.8, [222, 156, 46]], [1, [166, 98, 14]]];
+function heat(v) { for (let i = 0; i < HEAT.length - 1; i++) { const [a, ca] = HEAT[i], [b, cb] = HEAT[i + 1];
+  if (v <= b) { const t = Math.max(0, (v - a) / (b - a)); return ca.map((c, k) => Math.round(c + (cb[k] - c) * t)); } } return HEAT[HEAT.length - 1][1]; }
+function hexFade(z) { return Math.max(0, Math.min(1, (Z_HEX[1] - z) / (Z_HEX[1] - Z_HEX[0]))); }
+function cityFade(z) { return Math.max(0, Math.min(1, (z - Z_HEX[0]) / (Z_HEX[1] - Z_HEX[0]))); }
 function hexPoly(i, s) {
-  const lon = H.lon[i], lat = H.lat[i], z = S.lift, P = [];
-  for (let k = 0; k < 6; k++) P.push([lon + H.vx[k] * s, lat + H.vy[k] * s, z]);
+  const lon = H.lon[i], lat = H.lat[i], P = [];
+  for (let k = 0; k < 6; k++) P.push([lon + H.vx[k] * s, lat + H.vy[k] * s]);
   return P;
 }
-function hexScale(v) { return v < 0.3 ? 0 : 0.1 + 0.86 * Math.pow((v - 0.3) / 0.7, 1.6); }
+function hexScale(v) { return v < 0.3 ? 0 : 0.35 + 0.6 * Math.pow((v - 0.3) / 0.7, 1.2); }
 // newly joined to the largest flower network for small bees by the 25 bee stops (AFTER, April–September)
 function joined(i) { if (!S.after || S.guild !== "small" || S.month < 4) return false; const m = String(S.month).padStart(2, "0"); return H.big1[m][i] && !H.big0[m][i]; }
-function hexSize(i, k) { const v = HV[i * 28 + k] / 255; return joined(i) ? Math.max(hexScale(v), 0.62) : hexScale(v); }
+function hexSize(i, k) { const v = HV[i * 28 + k] / 255; return joined(i) ? Math.max(hexScale(v), 0.8) : hexScale(v); }
+const CYL = (() => { const P = [], Nn = [], I = [], n = 8;
+  for (let k = 0; k <= n; k++) { const f = 2 * Math.PI * k / n, x = Math.cos(f), y = Math.sin(f); P.push(x, y, -1, x, y, 1); Nn.push(x, y, 0, x, y, 0); }
+  for (let k = 0; k < n; k++) { const a = 2 * k; I.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
+  return { attributes: { positions: { value: new Float32Array(P), size: 3 }, normals: { value: new Float32Array(Nn), size: 3 } }, indices: { value: new Uint16Array(I), size: 1 } }; })();
 
 function layers() {
-  const L_ = [], k = SCEN(), z = map ? map.getZoom() : 14;
-  if (S.show.trees && z >= 13.2) {
+  const L_ = [], k = SCEN(), z = map ? map.getZoom() : 14, hf = hexFade(z), cf = cityFade(z);
+  if (S.show.trees && cf > 0.01) {
+    L_.push(new deck.SimpleMeshLayer({ id: "trunks", data: { length: TREES.n, attributes: { getPosition: { value: TREES.tpos, size: 3 } } },
+      getScale: (_, { index }) => [TREES.tsc[3 * index], TREES.tsc[3 * index], TREES.tsc[3 * index + 2]], mesh: CYL, getColor: [118, 92, 70, 255], opacity: cf,
+      material: { ambient: 0.6, diffuse: 0.5, shininess: 0 } }));
     L_.push(new deck.SimpleMeshLayer({ id: "trees", data: { length: TREES.n, attributes: { getPosition: { value: TREES.pos, size: 3 }, getColor: { value: TREES.col, size: 4 } } },
-      getScale: (_, { index }) => [TREES.sc[3 * index], TREES.sc[3 * index + 1], TREES.sc[3 * index + 2]], mesh: SPHERE, getOrientation: [0, 0, 0],
+      getScale: (_, { index }) => [TREES.sc[3 * index], TREES.sc[3 * index + 1], TREES.sc[3 * index + 2]], mesh: SPHERE, getOrientation: [0, 0, 0], opacity: cf,
       material: { ambient: 0.55, diffuse: 0.6, shininess: 8, specularColor: [30, 30, 30] }, pickable: true, autoHighlight: true, highlightColor: [138, 122, 196, 255],
       updateTriggers: { getColor: S.month } }));
   }
-  if (S.show.obs) L_.push(new deck.ScatterplotLayer({ id: "obs", data: OBS, getPosition: d => [d.lon, d.lat, 1.5], getRadius: 7, radiusUnits: "meters", radiusMinPixels: 2.5, radiusMaxPixels: 7,
-    getFillColor: [150, 92, 12, 230], stroked: true, getLineColor: [255, 255, 255, 220], lineWidthMinPixels: 1, pickable: true }));
-  if (S.show.hex) {
-    L_.push(new deck.PolygonLayer({ id: "hex", data: H.idx, getPolygon: i => hexPoly(i, hexSize(i, k)), extruded: true, wireframe: false,
-      getElevation: i => 2 + 6 * HV[i * 28 + k] / 255, getFillColor: i => { const v = HV[i * 28 + k] / 255, j = joined(i); if (v < 0.3 && !j) return [0, 0, 0, 0];
-        if (j) return [...GAP, Math.round(255 * Math.min(1, S.hexOp + 0.15))];
-        const c = honey(H.obs[i]); return [...c, Math.round(255 * S.hexOp * (0.55 + 0.45 * v))]; },
-      material: { ambient: 0.75, diffuse: 0.4, shininess: 0 }, pickable: true, autoHighlight: true, highlightColor: [138, 122, 196, 220],
-      updateTriggers: { getPolygon: [k, S.lift, S.after, S.month], getElevation: k, getFillColor: [k, S.hexOp, S.after, S.month] } }));
+  if (S.show.hex && hf > 0.01) {
+    L_.push(new deck.PolygonLayer({ id: "hex", data: H.idx, getPolygon: i => hexPoly(i, hexSize(i, k)), filled: true, stroked: false, opacity: hf,
+      getFillColor: i => { const v = HV[i * 28 + k] / 255, j = joined(i); if (v < 0.3 && !j) return [0, 0, 0, 0];
+        if (j) return [...GAP, Math.round(255 * S.hexOp)];
+        return [...heat(v), Math.round(255 * S.hexOp * (0.6 + 0.4 * v))]; },
+      pickable: true, autoHighlight: true, highlightColor: [138, 122, 196, 200],
+      updateTriggers: { getPolygon: [k, S.after, S.month], getFillColor: [k, S.hexOp, S.after, S.month] } }));
     // missing links: violet rings where many bee paths cross poor ground
-    L_.push(new deck.PolygonLayer({ id: "gaps", data: H.idx.filter(i => H.gap[i] >= H.gapThr), getPolygon: i => hexPoly(i, 0.98), filled: false, stroked: true,
-      getLineColor: [...GAP, 210], getLineWidth: 2, lineWidthUnits: "pixels", updateTriggers: { getPolygon: S.lift } }));
+    L_.push(new deck.PolygonLayer({ id: "gaps", data: H.idx.filter(i => H.gap[i] >= H.gapThr), getPolygon: i => hexPoly(i, 0.95), filled: false, stroked: true, opacity: hf,
+      getLineColor: [...GAP, 230], getLineWidth: 1.6, lineWidthUnits: "pixels" }));
   }
+  if (S.show.obs) L_.push(new deck.ScatterplotLayer({ id: "obs", data: OBS, getPosition: d => [d.lon, d.lat, 1.5], getRadius: 6, radiusUnits: "meters", radiusMinPixels: 1.8, radiusMaxPixels: 6,
+    getFillColor: [60, 44, 24, 220], stroked: true, getLineColor: [255, 255, 255, 200], lineWidthMinPixels: 0.8, pickable: true }));
   if (S.show.stops) {
     const ch = STOPS.filter(s => s.rank > 0);
-    L_.push(new deck.ScatterplotLayer({ id: "stops", data: ch, getPosition: d => [d.lon, d.lat, 2], getRadius: 16, radiusUnits: "meters", radiusMinPixels: 6,
-      filled: true, getFillColor: S.after ? [138, 122, 196, 230] : [255, 255, 255, 230], stroked: true, getLineColor: [138, 122, 196, 255], lineWidthMinPixels: 2.5, pickable: true,
+    L_.push(new deck.ScatterplotLayer({ id: "stops", data: ch, getPosition: d => [d.lon, d.lat, 3], getRadius: 18, radiusUnits: "meters", radiusMinPixels: 9,
+      filled: true, getFillColor: S.after ? [138, 122, 196, 240] : [255, 255, 255, 240], stroked: true, getLineColor: [138, 122, 196, 255], lineWidthMinPixels: 2.5, pickable: true,
       updateTriggers: { getFillColor: S.after } }));
-    L_.push(new deck.LineLayer({ id: "stoppins", data: ch, getSourcePosition: d => [d.lon, d.lat, 2], getTargetPosition: d => [d.lon, d.lat, S.lift], getColor: [138, 122, 196, 160], getWidth: 1.5,
-      updateTriggers: { getTargetPosition: S.lift } }));
-    L_.push(new deck.TextLayer({ id: "stoplbl", data: ch, getPosition: d => [d.lon, d.lat, S.lift + 10], getText: d => String(d.rank), getSize: 13, getColor: [90, 76, 160, 255],
-      fontWeight: 700, fontFamily: "Inter, sans-serif", outlineWidth: 4, outlineColor: [255, 255, 255, 255], fontSettings: { sdf: true }, updateTriggers: { getPosition: S.lift } }));
+    L_.push(new deck.TextLayer({ id: "stoplbl", data: ch, getPosition: d => [d.lon, d.lat, 3], getText: d => String(d.rank), getSize: 11, getColor: S.after ? [255, 255, 255, 255] : [90, 76, 160, 255],
+      fontWeight: 700, fontFamily: "Inter, sans-serif", fontSettings: { sdf: true }, updateTriggers: { getColor: S.after } }));
   }
   return L_;
 }
@@ -125,11 +141,12 @@ function ground() {
   const bb = ST.bbox;
   map.addSource("pilot", { type: "geojson", data: { type: "Feature", geometry: { type: "Polygon", coordinates: [[[bb[0][0], bb[0][1]], [bb[1][0], bb[0][1]], [bb[1][0], bb[1][1]], [bb[0][0], bb[1][1]], [bb[0][0], bb[0][1]]]] } } });
   map.addSource("bio", { type: "geojson", data: "data/biotopes.json" });
-  map.addLayer({ id: "bio", type: "fill", source: "bio", paint: { "fill-color": FORAGE, "fill-opacity": 0.92 } });
+  map.addLayer({ id: "bio", type: "fill", source: "bio", paint: { "fill-color": FORAGE, "fill-opacity": ["interpolate", ["linear"], ["zoom"], 13, 0.35, 14.4, 0.4, 15.3, 0.92] } });
   map.addLayer({ id: "bio-line", type: "line", source: "bio", minzoom: 14.5, paint: { "line-color": "#ffffff", "line-width": 0.5, "line-opacity": 0.6 } });
   map.addLayer({ id: "pilot-line", type: "line", source: "pilot", paint: { "line-color": "#8a7ac4", "line-width": 1.5, "line-dasharray": [3, 2] } });
   map.addSource("bld", { type: "geojson", data: "data/buildings.json" });
-  map.addLayer({ id: "bld", type: "fill-extrusion", source: "bld", minzoom: 13, paint: { "fill-extrusion-color": "#ece7de", "fill-extrusion-height": ["get", "h"], "fill-extrusion-opacity": 0.82, "fill-extrusion-vertical-gradient": true } });
+  map.addLayer({ id: "bld-flat", type: "fill", source: "bld", maxzoom: 15.3, paint: { "fill-color": "#e9e4da", "fill-opacity": ["interpolate", ["linear"], ["zoom"], 13, 0.55, 15.3, 0] } });
+  map.addLayer({ id: "bld", type: "fill-extrusion", source: "bld", minzoom: 14.4, paint: { "fill-extrusion-color": "#ece7de", "fill-extrusion-height": ["interpolate", ["linear"], ["zoom"], 14.4, 0, 15.3, ["get", "h"]], "fill-extrusion-opacity": 0.85, "fill-extrusion-vertical-gradient": true } });
 }
 
 function panel() {
@@ -148,7 +165,8 @@ function init() {
   overlay = new deck.MapboxOverlay({ interleaved: false, layers: [], getTooltip: tip });
   map.addControl(overlay);
   map.on("load", () => { ground(); treeColours(); redraw(); panel(); $("#load").classList.add("gone"); });
-  map.on("zoomend", redraw);
+  let raf = 0;
+  map.on("zoom", () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; redraw(); }); });
   map.on("click", e => { const f = map.queryRenderedFeatures(e.point, { layers: ["bio"] })[0]; if (!f) return;
     const p = f.properties; $("#detail").hidden = false;
     $("#detail").innerHTML = `<h3>${p.bt_name}</h3><div class="row"><span>${L("Flowers for bees (score)", "Arılar için çiçek (puan)")}</span><b class="mono">${(+p.forage).toFixed(2)}</b></div>
@@ -160,10 +178,9 @@ function ui() {
   document.querySelectorAll("#ba button").forEach(b => b.onclick = () => { document.querySelectorAll("#ba button").forEach(x => x.classList.toggle("on", x === b)); S.after = b.dataset.a === "1"; redraw(); });
   $("#month").oninput = e => { S.month = +e.target.value; treeColours(); redraw(); panel(); };
   for (const k of Object.keys(S.show)) { const el = $("#t_" + k); if (el) el.onchange = e => { S.show[k] = e.target.checked;
-    if (k === "bld") map.setLayoutProperty("bld", "visibility", e.target.checked ? "visible" : "none");
-    else if (k === "ground") map.setPaintProperty("bio", "fill-opacity", e.target.checked ? 0.92 : 0);
+    if (k === "bld") ["bld", "bld-flat"].forEach(l => map.setLayoutProperty(l, "visibility", e.target.checked ? "visible" : "none"));
+    else if (k === "ground") map.setLayoutProperty("bio", "visibility", e.target.checked ? "visible" : "none");
     else redraw(); }; }
-  $("#lift").oninput = e => { S.lift = +e.target.value; $("#liftV").textContent = S.lift + " m"; redraw(); };
   $("#hop").oninput = e => { S.hexOp = +e.target.value; $("#hopV").textContent = Math.round(S.hexOp * 100) + "%"; redraw(); };
   $("#stops").innerHTML = STOPS.filter(s => s.rank > 0).sort((a, b) => a.rank - b.rank).map(s => `<li data-r="${s.rank}"><b class="mono">${s.rank}</b><span>${s.n || L("stop", "durak")}</span></li>`).join("");
   $("#stops").querySelectorAll("li").forEach(li => li.onclick = () => { const s = STOPS.find(x => x.rank === +li.dataset.r); map.flyTo({ center: [s.lon, s.lat], zoom: 16.3, pitch: 58, duration: 1600 }); });

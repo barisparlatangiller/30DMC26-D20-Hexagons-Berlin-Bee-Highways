@@ -132,11 +132,21 @@ GAPTHR = np.sort(GAP)[int(len(GAP) * 0.975)]
 JOINED7 = np.array(HJ["big1"]["07"]) & ~np.array(HJ["big0"]["07"]).astype(bool)
 
 
+HEAT = [(0.3, (247, 236, 210)), (0.55, (241, 204, 110)), (0.8, (222, 156, 46)), (1.0, (166, 98, 14))]
+
+
+def heat(v):
+    for (a, ca), (b, cb) in zip(HEAT[:-1], HEAT[1:]):
+        if v <= b:
+            t = max(0.0, (v - a) / (b - a)); return tuple(int(c + (d - c) * t) for c, d in zip(ca, cb))
+    return HEAT[-1][1]
+
+
 def hex_scale(v):
-    return np.where(v < 0.3, 0, 0.1 + 0.86 * np.power(np.clip((v - 0.3) / 0.7, 0, 1), 1.6))
+    return np.where(v < 0.3, 0, 0.35 + 0.6 * np.power(np.clip((v - 0.3) / 0.7, 0, 1), 1.2))
 
 
-def draw_hexes(im, v, vals, lift=1.0, alpha=0.66, gaps=0.0, joined=0.0):
+def draw_hexes(im, v, vals, lift=1.0, alpha=0.85, gaps=0.0, joined=0.0):
     """honeycomb floating above the ground: shadow offset by 'lift', cells sized by vals (0–1)"""
     ov = Image.new("RGBA", im.size, (0, 0, 0, 0)); d = ImageDraw.Draw(ov)
     sh = Image.new("RGBA", im.size, (0, 0, 0, 0)); ds = ImageDraw.Draw(sh)
@@ -151,11 +161,10 @@ def draw_hexes(im, v, vals, lift=1.0, alpha=0.66, gaps=0.0, joined=0.0):
     for i in np.nonzero(m)[0]:
         r = e * sc[i]
         pts = [(px[i] + r * math.cos(a), py[i] + r * math.sin(a)) for a in ang]
-        ds.polygon([(x + off, y + off * 1.2) for x, y in pts], fill=(70, 60, 40, int(70 * lift)))
         if joined > 0 and JOINED7[i]:
             d.polygon(pts, fill=VIOLET + (int(235 * joined),), outline=(255, 255, 255, 140))
         else:
-            d.polygon(pts, fill=HCOL[i] + (int(255 * alpha * (0.55 + 0.45 * vals[i])),), outline=(255, 255, 255, int(110 * alpha)))
+            d.polygon(pts, fill=heat(vals[i]) + (int(255 * alpha * (0.6 + 0.4 * vals[i])),))
     if gaps > 0:
         for i in np.nonzero((GAP >= GAPTHR) & (px > 0) & (px < W) & (py > 0) & (py < MAP_H))[0]:
             pts = [(px[i] + e * 0.98 * math.cos(a), py[i] + e * 0.98 * math.sin(a)) for a in ang]
@@ -228,8 +237,8 @@ def main():
     for k in range(int(FPS * 3.6)):
         a = ease(k / (FPS * 2.2))
         img = draw_hexes(t7, FULL, vals7 * a, lift=a, alpha=0.66 * a)
-        save(compose(img, Q, "July · small solitary bees", ("The honeycomb floats above the city", "bigger cell = stronger link · darker honey = more bee records")))
-    still = compose(draw_hexes(t7, FULL, vals7, gaps=1.0), Q, "July · small solitary bees", ("The honeycomb floats above the city", "bigger cell = stronger link · darker = more bee records"))
+        save(compose(img, Q, "July · small solitary bees", ("A honeycomb of bee links", "bigger and darker cell = stronger link for bees")))
+    still = compose(draw_hexes(t7, FULL, vals7, gaps=1.0), Q, "July · small solitary bees", ("A honeycomb of bee links", "bigger and darker cell = stronger link for bees"))
     still.save(OUT / "still_honeycomb.png")
     # D · months March → September (6.4 s)
     ND = int(FPS * 6.4)
@@ -290,8 +299,8 @@ def main():
             d.text((W // 2, MAP_Y + 662), "trees mapped one by one, each with its flowering months", font=F["sm"], fill=INK, anchor="ma")
             d.text((W // 2, MAP_Y + 770), "Explore every month in 3D: barisparlatangiller.github.io", font=F["lab"], fill=INK2, anchor="ma")
             d.text((W // 2, MAP_Y + 812), "A model of potential, not measured flight routes", font=F["lab"], fill=INK3, anchor="ma")
-        save(compose(dim, "Bee highways: the missing links", "a floating honeycomb over Berlin", v=ZV, labels=0, overlay=ov))
-    compose(dim, "Bee highways: the missing links", "a floating honeycomb over Berlin", v=ZV, labels=0, overlay=ov).save(OUT / "outro.png")
+        save(compose(dim, "Bee highways: the missing links", "a honeycomb of bee links over Berlin", v=ZV, labels=0, overlay=ov))
+    compose(dim, "Bee highways: the missing links", "a honeycomb of bee links over Berlin", v=ZV, labels=0, overlay=ov).save(OUT / "outro.png")
     still.save(OUT / "cover.png")
     out = OUT / "day20_berlin_bee_highways.mp4"
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(FPS), "-i", str(fr / "f%04d.jpg"), "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",

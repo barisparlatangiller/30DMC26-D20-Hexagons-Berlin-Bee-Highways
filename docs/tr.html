@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
-<link href="style.css?v=1" rel="stylesheet">
+<link href="style.css?v=2" rel="stylesheet">
 </head>
 <body>
 <div class="app">
@@ -23,20 +23,22 @@
     </div>
     <div class="card legend">
       <h4>Petek nasıl okunur</h4>
-      <div class="lg"><svg width="46" height="18" viewBox="0 0 46 18"><polygon points="4,9 6.5,4.7 11.5,4.7 14,9 11.5,13.3 6.5,13.3" fill="#e8b03c"/><polygon points="18,9 22,2 30,2 34,9 30,16 22,16" fill="#e8b03c"/></svg><span>Hücre boyutu: geçen arı trafiği (devre modeli)</span></div>
-      <div class="lg"><i class="ramp"></i><span>Hücre rengi: 120 m içindeki yabani arı kayıtları</span></div>
-      <div class="tk mono"><span>yok</span><span>çok</span></div>
+      <div class="lg"><svg width="46" height="18" viewBox="0 0 46 18"><polygon points="4,9 6.5,4.7 11.5,4.7 14,9 11.5,13.3 6.5,13.3" fill="#e8b03c"/><polygon points="18,9 22,2 30,2 34,9 30,16 22,16" fill="#e8b03c"/></svg><span>Büyük hücre: arılar için güçlü bağlantı (devre modeli)</span></div>
+      <div class="lg"><i class="ramp"></i><span>Koyu bal rengi: daha çok arı trafiği</span></div>
+      <div class="tk mono"><span>az</span><span>çok</span></div>
+      <div class="lg"><i class="dot" style="background:#3c2c18;width:8px;height:8px;margin-left:19px"></i><span>Yabani arı kaydı (iNaturalist, GBIF)</span></div>
       <div class="lg"><svg width="46" height="18" viewBox="0 0 46 18"><polygon points="15,9 19,2 27,2 31,9 27,16 19,16" fill="none" stroke="#8a7ac4" stroke-width="2"/></svg><span>Mor çerçeve: eksik halka, arı yolları fakir zeminden geçiyor</span></div>
       <div class="lg"><svg width="46" height="18" viewBox="0 0 46 18"><polygon points="15,9 19,2 27,2 31,9 27,16 19,16" fill="#8a7ac4"/></svg><span>Mor hücre (+ 25 arı durağı): en büyük çiçek ağına yeni katılan</span></div>
       <div class="lg"><i class="sw" style="background:linear-gradient(90deg,#e8e4dc,#d8e0bb,#93bb72)"></i><span>Zemin: arılar için çiçek</span></div>
       <div class="lg"><i class="dot" style="background:#ecba46"></i><span>bal rengi = çiçekte ve arılar için iyi</span></div>
+      <p class="zoomhint">Uzaklaşınca ağ petek olarak, yaklaşınca her ağaç, gövde ve bina görünür.</p>
     </div>
     <div id="load" class="loading">Çiçekler sayılıyor…</div>
   </main>
   <aside class="panel card">
     <p class="eyebrow">#30DayMapChallenge · Gün 20 · Altıgenler · Berlin</p>
     <h1>Arı otoyolları: eksik halkalar</h1>
-    <p class="lede">Tempelhofer Feld, Hasenheide ve Neukölln arasında her çiçek alanı, her ıhlamur ve her bahçe bu haritada. <b>Şehrin üzerinde süzülen petek</b>, yabani arıların çiçekten çiçeğe nereden geçebildiğini gösteriyor: <b>hücre ne kadar büyükse bağlantı o kadar güçlü</b>. Koyu bal rengi, orada gerçekten daha çok yabani arı kaydedildiğini gösteriyor.</p>
+    <p class="lede">Tempelhofer Feld, Hasenheide ve Neukölln arasında her çiçek alanı, her ıhlamur ve her bahçe bu haritada. Uzaktan bakınca <b>zemindeki petek</b>, yabani arıların çiçekten çiçeğe nereden geçebildiğini gösteriyor: <b>hücre ne kadar büyük ve koyuysa bağlantı o kadar güçlü</b>. Yaklaşınca petek kayboluyor, her ağaç ve bina ortaya çıkıyor. Koyu noktalar gerçek yabani arı kayıtları.</p>
     <div class="stats">
       <div class="st"><b class="mono">762</b><span>ha: küçük bir yabani arının Temmuz'da kullanabildiği en büyük çiçek ağı; 25 arı durağıyla 312 ha'dan bu değere çıkıyor</span></div>
       <div class="st"><b class="mono">1.058</b><span>pilot bölgede yabani arı kaydı, 103 takson (iNaturalist + GBIF, bal arısı hariç)</span></div>
@@ -53,22 +55,21 @@
     <section class="block">
       <h2 class="label">Katmanlar</h2>
       <div class="toggles">
-        <label><input type="checkbox" id="t_hex" checked><span>Petek</span><em>boyut = bağlantı gücü · renk = arı kaydı</em></label>
+        <label><input type="checkbox" id="t_hex" checked><span>Petek</span><em>boyut ve renk = bağlantı gücü</em></label>
         <label><input type="checkbox" id="t_trees" checked><span>Ağaçlar (3B)</span><em>bal rengi = çiçekte ve arılar için iyi</em></label>
         <label><input type="checkbox" id="t_ground" checked><span>Zemin: arılar için çiçek</span><em>Berlin biyotop haritası 2024</em></label>
         <label><input type="checkbox" id="t_bld" checked><span>Binalar</span><em>OSM</em></label>
         <label><input type="checkbox" id="t_obs" checked><span>Yabani arı kayıtları</span><em>iNaturalist, GBIF</em></label>
         <label><input type="checkbox" id="t_stops" checked><span>Arı durakları</span><em>önerilen 25 çiçekli durak</em></label>
       </div>
-      <div class="sl"><span>Yükseklik</span><input type="range" id="lift" min="20" max="160" step="5" value="70"><b id="liftV">70 m</b></div>
-      <div class="sl"><span>Saydamlık</span><input type="range" id="hop" min="0.2" max="1" step="0.02" value="0.62"><b id="hopV">62%</b></div>
+      <div class="sl"><span>Saydamlık</span><input type="range" id="hop" min="0.2" max="1" step="0.02" value="0.85"><b id="hopV">85%</b></div>
     </section>
     <section class="block">
       <h2 class="label">25 arı durağı</h2>
       <ol class="stops" id="stops"></ol>
       <p class="hint">30 m × 30 m'lik bir çiçek yatağının küçük arılar için en çok çiçek ağını birleştireceği otobüs ve tramvay durakları (sırayla seçildi, Nisan–Eylül). Tıklayınca oraya gider.</p>
     </section>
-    <details class="howto" open><summary>Harita nasıl okunur</summary><ol><li><b>Zemin</b> Berlin biyotop haritası: ne kadar yeşilse arılar için o kadar çok çiçek var. Sokaklar ve çatılar soluk.</li><li><b>Ağaçlar</b> sokak ve park ağacı envanterinden tek tek çizildi. Arılar için iyiyseler çiçek açtıkları aylarda <b>bal rengine</b> döner (Haziran–Temmuz'da ıhlamur, Mayıs'ta akasya, Nisan'da akçaağaç …).</li><li><b>Petek</b> şehrin üzerinde süzülüyor. Her hücre 30 m genişliğinde. <b>Boyut</b> modelin oradan geçirdiği arı trafiğini, <b>renk</b> yakında gerçekten kaç yabani arı kaydedildiğini gösterir. Büyük ama soluk hücreler: kimsenin bakmadığı olası otoyollar. Mor halkalar: eksik halkalar.</li><li><b>Arıyı</b>, <b>ayı</b> ve <b>bugün / + 25 arı durağı</b> seçimini değiştirerek ağın nasıl değiştiğini görün.</li></ol></details>
+    <details class="howto" open><summary>Harita nasıl okunur</summary><ol><li><b>Zemin</b> Berlin biyotop haritası: ne kadar yeşilse arılar için o kadar çok çiçek var. Sokaklar ve çatılar soluk.</li><li><b>Ağaçlar</b> sokak ve park ağacı envanterinden tek tek çizildi. Arılar için iyiyseler çiçek açtıkları aylarda <b>bal rengine</b> döner (Haziran–Temmuz'da ıhlamur, Mayıs'ta akasya, Nisan'da akçaağaç …).</li><li>Uzaktan bakınca <b>petek</b> zeminde durur: hücreler 30 m genişliğinde, <b>modelin daha çok arı trafiği geçirdiği yerde daha büyük ve koyu</b>. Koyu noktalar insanların gerçekten kaydettiği yabani arılardır. Mor halkalar: eksik halkalar. Yaklaşınca petek ayrıntılı şehre dönüşür.</li><li><b>Arıyı</b>, <b>ayı</b> ve <b>bugün / + 25 arı durağı</b> seçimini değiştirerek ağın nasıl değiştiğini görün.</li></ol></details>
     <details class="howto"><summary>Yöntem</summary><p><b>Çiçek ve yuva.</b> 1.675 biyotop tipinin her birine bir besin ve bir yuva puanı (0–1) ile çiçeklenme ayları verildi: ön sınıflandırmadan yola çıkıldı ve kentsel tipler (yeşil iç avlular, hobi bahçeleri, demiryolu alanları, sokaklar) eklendi. Sokak ve park ağaçları cinse ve aya göre çiçek ekler (arı bitkisi listeleri). Kaplı yüzeyler (Berlin 2021) ve binalar (OSM) yuva zeminini azaltır.</p><p><b>Bağlantılar.</b> 10 m'lik grid bir direnç ağına dönüşür: kaplı zemin, yüksek binalar ve çiçeksiz hücreler arıyı yavaşlatır. Çiçekçe zengin 3.600 hücre çifti tek tek bağlanır ve her hücreden geçen akım toplanır (devre teorisi, Circuitscape'teki gibi). Her çift, iki ucu da o ay çiçekteyse ve arının menzili izin veriyorsa o kadar sayılır (küçük yalnız arılar 300 m, bombus 1 km).</p><p><b>Arı durakları.</b> Küçük arılar için aralarında en fazla 100 m olan çiçek alanları tek bir ağ oluşturur. Her aday otobüs ve tramvay durağına 30 m × 30 m'lik bir çiçek yatağı (Nisan–Eylül) konur; en çok ağ alanını birleştiren 25 durak tek tek seçilir (eşdeğer bağlantılı alan). Ardından devre modeli onlarla yeniden çalıştırılır.</p></details>
     <details class="howto"><summary>Sınırlar</summary><p>Bu bir <b>potansiyel modeli</b>; ölçülmüş nektar ya da doğrulanmış uçuş rotası değildir. Puanlar uzman tarzı kurallardır ve arazide doğrulanmalıdır. Yabani arılar türe göre farklıdır: kimi tek bir bitkiye, kimi kuma, kimi ölü odun ister.</p><p>Kayıt olmaması arı olmadığı anlamına gelmez: kayıtlar insanların yürüdüğü yerlerde (parklar, Tempelhofer Feld) yoğunlaşır. Yalnızca 100 m veya daha iyi konum hassasiyeti kullanıldı; gizlenmiş kayıtlar ve bal arısı çıkarıldı. Açık lisansı olmayan kayıtlar sayılır ama nokta olarak gösterilmez.</p></details>
     <details class="howto"><summary>Kaynaklar</summary><ol class="refs"><li>Biotoptypen 2024, Versiegelung 2021, Baumbestand (sokak ve park ağaçları), Grünanlagen: Senatsverwaltung für Mobilität, Verkehr, Klimaschutz und Umwelt Berlin, Geoportal Berlin (dl-de/zero-2-0).</li><li>Yabani arı gözlemleri: iNaturalist (Anthophila, Berlin, 17 Kasım 2026 dışa aktarım), kayıt bazında lisans; GBIF.org (17 Kasım 2026) <a href="https://doi.org/10.15468/dl.w965pw">doi:10.15468/dl.w965pw</a>, CC BY-NC 4.0.</li><li>Binalar ve duraklar: © OpenStreetMap katkıcıları, ODbL. Altlık © CARTO.</li><li>Yöntem: McRae, B. H. vd. (2008) Ecology 89: 2712–2724 (devre teorisi). Saura, S. vd. (2011) Ecol. Indicators 11: 407–416 (eşdeğer bağlantılı alan).</li></ol></details>
@@ -77,6 +78,6 @@
 </div>
 <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/deck.gl@9.0.38/dist.min.js"></script>
-<script src="app.js?v=1"></script>
+<script src="app.js?v=2"></script>
 </body>
 </html>

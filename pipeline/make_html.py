@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 
-V = "1"
+V = "2"
 ST = json.loads(Path("docs/data/stats.json").read_text())
 I7 = ST["islands"]["07"]
 NUM = lambda x, tr: (f"{x:,.0f}".replace(",", ".") if tr else f"{x:,.0f}")
@@ -11,22 +11,22 @@ S = {
  "en": dict(
   title="Bee Highways · Berlin", desc="Where do Berlin's wild bees find flowers, where are the gaps between them, and which 25 flowering bus stops would close them? A 3D honeycomb over Tempelhofer Feld, Hasenheide and Neukölln.",
   load="Counting flowers…", eyebrow="#30DayMapChallenge · Day 20 · Hexagons · Berlin", h1="Bee highways: the missing links",
-  lede="Between Tempelhofer Feld, Hasenheide and Neukölln, every flower patch, lime tree and garden is on this map. The <b>honeycomb floating above the city</b> shows where wild bees can travel from flower to flower: <b>bigger cells, stronger links</b>. Darker honey means more wild bees have actually been recorded there.",
+  lede="Between Tempelhofer Feld, Hasenheide and Neukölln, every flower patch, lime tree and garden is on this map. Zoomed out, a <b>honeycomb on the ground</b> shows where wild bees can travel from flower to flower: <b>bigger and darker cells, stronger links</b>. Zoom in and it gives way to every tree and building. Dark dots are real wild-bee records.",
   s1=f"ha: the largest flower network a small wild bee can use in July, up from {NUM(I7['largest_before'], False)} ha with 25 bee stops",
   s2=f"wild-bee records in the pilot area, {ST['taxa_pilot']} taxa (iNaturalist + GBIF, no honey bee)",
   s3=f"lime, maple, black locust and other trees mapped one by one ({NUM(ST['trees'], False)} in total)",
   bee="Which bee?", small="Small solitary bee", smallE="hops ≤ 100 m, forages ~300 m", bumble="Bumblebee", bumbleE="forages ~1 km",
   month="Month", before="Today", after="+ 25 bee stops",
-  layers="Layers", lHex="Honeycomb", lHexE="size = link strength · colour = bee records", lTrees="Trees (3D)", lTreesE="honey = in flower and good for bees",
+  layers="Layers", lHex="Honeycomb", lHexE="size and colour = link strength", lTrees="Trees (3D)", lTreesE="honey = in flower and good for bees",
   lBld="Buildings", lBldE="OSM", lObs="Wild-bee records", lObsE="iNaturalist, GBIF", lStops="Bee stops", lStopsE="25 proposed flowering stops", lGround="Ground: flowers for bees", lGroundE="Berlin biotope map 2024",
   lift="Height", hexop="Opacity", views="Views", vAll="Pilot area", vFeld="Tempelhofer Feld", vHasen="Hasenheide", vTop="Top view",
   stopsT="25 bee stops", stopsH="Bus and tram stops where a 30 m × 30 m flower bed would join the most flower networks for small bees (greedy, April–September). Click to fly there.",
-  legT="How to read the honeycomb", leg1="Cell size: how much bee traffic passes (circuit model)", leg2="Cell colour: wild-bee records within 120 m", leg3="Violet outline: missing link, bee paths cross poor ground", leg4="Violet cell (+ 25 bee stops): newly joined to the largest flower network",
-  none="none", many="many",
+  legT="How to read the honeycomb", leg1="Bigger cell: stronger link for bees (circuit model)", leg2="Darker honey: more bee traffic", leg5="Wild-bee record (iNaturalist, GBIF)", zoomH="Zoom out: the network as a honeycomb. Zoom in: every tree, trunk and building.", leg3="Violet outline: missing link, bee paths cross poor ground", leg4="Violet cell (+ 25 bee stops): newly joined to the largest flower network",
+  none="little", many="a lot",
   howto="How to read this map",
   h_1="The <b>ground</b> is the Berlin biotope map: the greener, the more flowers for bees. Streets and roofs are pale.",
   h_2="<b>Trees</b> are drawn one by one from the street and park tree register. They turn <b>honey-coloured</b> in the months they flower, if they are good for bees (lime in June–July, black locust in May, maple in April …).",
-  h_3="The <b>honeycomb</b> floats above the city. Each cell is 30 m wide. <b>Size</b> shows how much bee traffic the model sends through it; <b>colour</b> shows how many wild bees people have actually recorded nearby. Big pale cells: likely highways nobody has checked. Violet rings: the missing links.",
+  h_3="Zoomed out, the <b>honeycomb</b> lies on the ground: cells 30 m wide, <b>bigger and darker where the model sends more bee traffic</b>. Dark dots are wild bees people have actually recorded. Violet rings: the missing links. Zoom in and the honeycomb fades into the detailed city.",
   h_4="Switch the <b>bee</b>, the <b>month</b> and <b>today / + 25 bee stops</b> to see the network change.",
   method="Method", m_1="<b>Flowers and nests.</b> Every one of the 1,675 biotope types gets a forage and a nesting score (0–1) and its flowering months, starting from a pre-classification and adding the urban types (green courtyards, allotments, railway land, streets). Street and park trees add flowers by genus and month (bee-forage lists). Sealed ground (Berlin sealing map 2021) and buildings (OSM) remove nesting ground.",
   m_2="<b>Links.</b> The 10 m grid becomes a network of resistors: sealed ground, tall buildings and cells without flowers slow a bee down. 3,600 pairs of flower-rich cells are connected one at a time and the current through every cell is summed (circuit theory, as in Circuitscape). Each pair counts as much as both ends flower that month and as the bee's range allows (300 m for small solitary bees, 1 km for bumblebees).",
@@ -43,22 +43,22 @@ S = {
  "tr": dict(
   title="Arı Otoyolları · Berlin", desc="Berlin'in yabani arıları çiçekleri nerede buluyor, aralarındaki boşluklar nerede ve hangi 25 çiçekli otobüs durağı bu boşlukları kapatır? Tempelhofer Feld, Hasenheide ve Neukölln üzerinde 3B bir petek.",
   load="Çiçekler sayılıyor…", eyebrow="#30DayMapChallenge · Gün 20 · Altıgenler · Berlin", h1="Arı otoyolları: eksik halkalar",
-  lede="Tempelhofer Feld, Hasenheide ve Neukölln arasında her çiçek alanı, her ıhlamur ve her bahçe bu haritada. <b>Şehrin üzerinde süzülen petek</b>, yabani arıların çiçekten çiçeğe nereden geçebildiğini gösteriyor: <b>hücre ne kadar büyükse bağlantı o kadar güçlü</b>. Koyu bal rengi, orada gerçekten daha çok yabani arı kaydedildiğini gösteriyor.",
+  lede="Tempelhofer Feld, Hasenheide ve Neukölln arasında her çiçek alanı, her ıhlamur ve her bahçe bu haritada. Uzaktan bakınca <b>zemindeki petek</b>, yabani arıların çiçekten çiçeğe nereden geçebildiğini gösteriyor: <b>hücre ne kadar büyük ve koyuysa bağlantı o kadar güçlü</b>. Yaklaşınca petek kayboluyor, her ağaç ve bina ortaya çıkıyor. Koyu noktalar gerçek yabani arı kayıtları.",
   s1=f"ha: küçük bir yabani arının Temmuz'da kullanabildiği en büyük çiçek ağı; 25 arı durağıyla {NUM(I7['largest_before'], True)} ha'dan bu değere çıkıyor",
   s2=f"pilot bölgede yabani arı kaydı, {ST['taxa_pilot']} takson (iNaturalist + GBIF, bal arısı hariç)",
   s3=f"ıhlamur, akçaağaç, akasya ve diğer ağaçlar tek tek ({NUM(ST['trees'], True)} ağaç)",
   bee="Hangi arı?", small="Küçük yalnız arı", smallE="≤ 100 m sıçrar, ~300 m'de beslenir", bumble="Bombus arısı", bumbleE="~1 km'de beslenir",
   month="Ay", before="Bugün", after="+ 25 arı durağı",
-  layers="Katmanlar", lHex="Petek", lHexE="boyut = bağlantı gücü · renk = arı kaydı", lTrees="Ağaçlar (3B)", lTreesE="bal rengi = çiçekte ve arılar için iyi",
+  layers="Katmanlar", lHex="Petek", lHexE="boyut ve renk = bağlantı gücü", lTrees="Ağaçlar (3B)", lTreesE="bal rengi = çiçekte ve arılar için iyi",
   lBld="Binalar", lBldE="OSM", lObs="Yabani arı kayıtları", lObsE="iNaturalist, GBIF", lStops="Arı durakları", lStopsE="önerilen 25 çiçekli durak", lGround="Zemin: arılar için çiçek", lGroundE="Berlin biyotop haritası 2024",
   lift="Yükseklik", hexop="Saydamlık", views="Görünümler", vAll="Pilot bölge", vFeld="Tempelhofer Feld", vHasen="Hasenheide", vTop="Üstten",
   stopsT="25 arı durağı", stopsH="30 m × 30 m'lik bir çiçek yatağının küçük arılar için en çok çiçek ağını birleştireceği otobüs ve tramvay durakları (sırayla seçildi, Nisan–Eylül). Tıklayınca oraya gider.",
-  legT="Petek nasıl okunur", leg1="Hücre boyutu: geçen arı trafiği (devre modeli)", leg2="Hücre rengi: 120 m içindeki yabani arı kayıtları", leg3="Mor çerçeve: eksik halka, arı yolları fakir zeminden geçiyor", leg4="Mor hücre (+ 25 arı durağı): en büyük çiçek ağına yeni katılan",
-  none="yok", many="çok",
+  legT="Petek nasıl okunur", leg1="Büyük hücre: arılar için güçlü bağlantı (devre modeli)", leg2="Koyu bal rengi: daha çok arı trafiği", leg5="Yabani arı kaydı (iNaturalist, GBIF)", zoomH="Uzaklaşınca ağ petek olarak, yaklaşınca her ağaç, gövde ve bina görünür.", leg3="Mor çerçeve: eksik halka, arı yolları fakir zeminden geçiyor", leg4="Mor hücre (+ 25 arı durağı): en büyük çiçek ağına yeni katılan",
+  none="az", many="çok",
   howto="Harita nasıl okunur",
   h_1="<b>Zemin</b> Berlin biyotop haritası: ne kadar yeşilse arılar için o kadar çok çiçek var. Sokaklar ve çatılar soluk.",
   h_2="<b>Ağaçlar</b> sokak ve park ağacı envanterinden tek tek çizildi. Arılar için iyiyseler çiçek açtıkları aylarda <b>bal rengine</b> döner (Haziran–Temmuz'da ıhlamur, Mayıs'ta akasya, Nisan'da akçaağaç …).",
-  h_3="<b>Petek</b> şehrin üzerinde süzülüyor. Her hücre 30 m genişliğinde. <b>Boyut</b> modelin oradan geçirdiği arı trafiğini, <b>renk</b> yakında gerçekten kaç yabani arı kaydedildiğini gösterir. Büyük ama soluk hücreler: kimsenin bakmadığı olası otoyollar. Mor halkalar: eksik halkalar.",
+  h_3="Uzaktan bakınca <b>petek</b> zeminde durur: hücreler 30 m genişliğinde, <b>modelin daha çok arı trafiği geçirdiği yerde daha büyük ve koyu</b>. Koyu noktalar insanların gerçekten kaydettiği yabani arılardır. Mor halkalar: eksik halkalar. Yaklaşınca petek ayrıntılı şehre dönüşür.",
   h_4="<b>Arıyı</b>, <b>ayı</b> ve <b>bugün / + 25 arı durağı</b> seçimini değiştirerek ağın nasıl değiştiğini görün.",
   method="Yöntem", m_1="<b>Çiçek ve yuva.</b> 1.675 biyotop tipinin her birine bir besin ve bir yuva puanı (0–1) ile çiçeklenme ayları verildi: ön sınıflandırmadan yola çıkıldı ve kentsel tipler (yeşil iç avlular, hobi bahçeleri, demiryolu alanları, sokaklar) eklendi. Sokak ve park ağaçları cinse ve aya göre çiçek ekler (arı bitkisi listeleri). Kaplı yüzeyler (Berlin 2021) ve binalar (OSM) yuva zeminini azaltır.",
   m_2="<b>Bağlantılar.</b> 10 m'lik grid bir direnç ağına dönüşür: kaplı zemin, yüksek binalar ve çiçeksiz hücreler arıyı yavaşlatır. Çiçekçe zengin 3.600 hücre çifti tek tek bağlanır ve her hücreden geçen akım toplanır (devre teorisi, Circuitscape'teki gibi). Her çift, iki ucu da o ay çiçekteyse ve arının menzili izin veriyorsa o kadar sayılır (küçük yalnız arılar 300 m, bombus 1 km).",
@@ -104,10 +104,12 @@ for lang, t in S.items():
       <div class="lg"><svg width="46" height="18" viewBox="0 0 46 18"><polygon points="4,9 6.5,4.7 11.5,4.7 14,9 11.5,13.3 6.5,13.3" fill="#e8b03c"/><polygon points="18,9 22,2 30,2 34,9 30,16 22,16" fill="#e8b03c"/></svg><span>{t['leg1']}</span></div>
       <div class="lg"><i class="ramp"></i><span>{t['leg2']}</span></div>
       <div class="tk mono"><span>{t['none']}</span><span>{t['many']}</span></div>
+      <div class="lg"><i class="dot" style="background:#3c2c18;width:8px;height:8px;margin-left:19px"></i><span>{t['leg5']}</span></div>
       <div class="lg"><svg width="46" height="18" viewBox="0 0 46 18"><polygon points="15,9 19,2 27,2 31,9 27,16 19,16" fill="none" stroke="#8a7ac4" stroke-width="2"/></svg><span>{t['leg3']}</span></div>
       <div class="lg"><svg width="46" height="18" viewBox="0 0 46 18"><polygon points="15,9 19,2 27,2 31,9 27,16 19,16" fill="#8a7ac4"/></svg><span>{t['leg4']}</span></div>
       <div class="lg"><i class="sw" style="background:linear-gradient(90deg,#e8e4dc,#d8e0bb,#93bb72)"></i><span>{t['lGround']}</span></div>
       <div class="lg"><i class="dot" style="background:#ecba46"></i><span>{t['lTreesE']}</span></div>
+      <p class="zoomhint">{t['zoomH']}</p>
     </div>
     <div id="load" class="loading">{t['load']}</div>
   </main>
@@ -138,8 +140,7 @@ for lang, t in S.items():
         <label><input type="checkbox" id="t_obs" checked><span>{t['lObs']}</span><em>{t['lObsE']}</em></label>
         <label><input type="checkbox" id="t_stops" checked><span>{t['lStops']}</span><em>{t['lStopsE']}</em></label>
       </div>
-      <div class="sl"><span>{t['lift']}</span><input type="range" id="lift" min="20" max="160" step="5" value="70"><b id="liftV">70 m</b></div>
-      <div class="sl"><span>{t['hexop']}</span><input type="range" id="hop" min="0.2" max="1" step="0.02" value="0.62"><b id="hopV">62%</b></div>
+      <div class="sl"><span>{t['hexop']}</span><input type="range" id="hop" min="0.2" max="1" step="0.02" value="0.85"><b id="hopV">85%</b></div>
     </section>
     <section class="block">
       <h2 class="label">{t['stopsT']}</h2>
