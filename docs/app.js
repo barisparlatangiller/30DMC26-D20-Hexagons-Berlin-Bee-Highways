@@ -98,16 +98,21 @@ function layers() {
       material: { ambient: 0.55, diffuse: 0.6, shininess: 8, specularColor: [30, 30, 30] }, pickable: true, autoHighlight: true, highlightColor: [138, 122, 196, 255],
       updateTriggers: { getColor: S.month } }));
   }
-  if (S.show.hex && hf > 0.01) {
-    L_.push(new deck.PolygonLayer({ id: "hex", data: H.idx, getPolygon: i => hexPoly(i, hexSize(i, k)), filled: true, stroked: false, opacity: hf,
+  if (S.show.hex) {
+    // one map at every zoom: zoomed out the honeycomb is a solid heat map; zoomed in it stays on the ground as a light,
+    // see-through layer with heat-coloured rims, so the bee highways run between the trees and buildings
+    L_.push(new deck.PolygonLayer({ id: "hex", data: H.idx, getPolygon: i => hexPoly(i, hexSize(i, k)), filled: true, stroked: false, opacity: 0.32 + 0.68 * hf,
       getFillColor: i => { const v = HV[i * 28 + k] / 255, j = joined(i); if (v < 0.3 && !j) return [0, 0, 0, 0];
         if (j) return [...GAP, Math.round(255 * S.hexOp)];
         return [...heat(v), Math.round(255 * S.hexOp * (0.6 + 0.4 * v))]; },
       pickable: true, autoHighlight: true, highlightColor: [138, 122, 196, 200],
       updateTriggers: { getPolygon: [k, S.after, S.month], getFillColor: [k, S.hexOp, S.after, S.month] } }));
+    if (cf > 0.01) L_.push(new deck.PolygonLayer({ id: "hexrim", data: H.idx.filter(i => HV[i * 28 + k] / 255 >= 0.45 || joined(i)), getPolygon: i => hexPoly(i, hexSize(i, k)), filled: false, stroked: true,
+      opacity: cf, getLineColor: i => joined(i) ? [...GAP, 255] : [...heat(HV[i * 28 + k] / 255).map(c => Math.round(c * 0.85)), 255], getLineWidth: i => 1 + 2.5 * HV[i * 28 + k] / 255,
+      lineWidthUnits: "pixels", updateTriggers: { getPolygon: [k, S.after, S.month], getLineColor: [k, S.after, S.month], getLineWidth: k } }));
     // missing links: violet rings where many bee paths cross poor ground
-    L_.push(new deck.PolygonLayer({ id: "gaps", data: H.idx.filter(i => H.gap[i] >= H.gapThr), getPolygon: i => hexPoly(i, 0.95), filled: false, stroked: true, opacity: hf,
-      getLineColor: [...GAP, 230], getLineWidth: 1.6, lineWidthUnits: "pixels" }));
+    L_.push(new deck.PolygonLayer({ id: "gaps", data: H.idx.filter(i => H.gap[i] >= H.gapThr), getPolygon: i => hexPoly(i, 0.95), filled: false, stroked: true, opacity: 1,
+      getLineColor: [...GAP, 230], getLineWidth: i => 1.6 + 1.4 * cf, lineWidthUnits: "pixels", updateTriggers: { getLineWidth: Math.round(cf * 10) } }));
   }
   if (S.show.obs) L_.push(new deck.ScatterplotLayer({ id: "obs", data: OBS, getPosition: d => [d.lon, d.lat, 1.5], getRadius: 6, radiusUnits: "meters", radiusMinPixels: 1.8, radiusMaxPixels: 6,
     getFillColor: [60, 44, 24, 220], stroked: true, getLineColor: [255, 255, 255, 200], lineWidthMinPixels: 0.8, pickable: true }));
@@ -162,7 +167,7 @@ function init() {
   if (!FILM && innerWidth > 760) map.setPadding({ left: 390, top: 40, right: 20, bottom: 0 });
   map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
   map.addControl(new maplibregl.AttributionControl({ compact: true, customAttribution: "Biotoptypen, Versiegelung, Baumbestand © Berlin SenMVKU (dl-de/zero-2-0) · bees © iNaturalist / GBIF · © OSM · © CARTO" }), "bottom-right");
-  overlay = new deck.MapboxOverlay({ interleaved: false, layers: [], getTooltip: tip });
+  overlay = new deck.MapboxOverlay({ interleaved: true, layers: [], getTooltip: tip });
   map.addControl(overlay);
   map.on("load", () => { ground(); treeColours(); redraw(); panel(); $("#load").classList.add("gone"); });
   let raf = 0;
