@@ -70,13 +70,14 @@ def ground_canvas(month):
     im = Image.new("RGB", (Wb, Hb), (236, 233, 226)); d = ImageDraw.Draw(im, "RGBA")
     tr = lambda x, y: ((x - FULL.x0) / pxm, (FULL.y1 - y) / pxm)
     bt = gpd.read_parquet(B / "biotopes.parquet")
-    def fcol(f):
-        stops = [(0, (232, 228, 220)), (0.15, (228, 226, 210)), (0.35, (216, 224, 187)), (0.6, (188, 211, 154)), (0.85, (147, 187, 114)), (1, (122, 166, 93))]
-        for (a, ca), (b, cb) in zip(stops[:-1], stops[1:]):
-            if f <= b:
-                t = (f - a) / (b - a); return tuple(int(c + (e - c) * t) for c, e in zip(ca, cb))
-        return stops[-1][1]
-    for g, f in zip(bt.geometry, bt.forage):
+    import re as _re
+    src = Path("pipeline/build_web.py").read_text()
+    CAT = eval(_re.search(r"CAT = (\{.*?\})\n", src, _re.S).group(1))
+    COLS = {"meadow": (156, 196, 106), "garden": (188, 208, 126), "park": (168, 197, 154), "yard": (212, 220, 182), "lawn": (223, 227, 204), "water": (207, 224, 230)}
+    def fcol(rule):
+        c = CAT.get(rule) or ("water" if str(rule).startswith("water") else None)
+        return COLS.get(c, (236, 232, 224))
+    for g, f in zip(bt.geometry, bt.rule):
         for p in getattr(g, "geoms", [g]):
             if p.geom_type != "Polygon" or p.is_empty:
                 continue
@@ -174,29 +175,102 @@ def draw_hexes(im, v, vals, lift=1.0, alpha=0.85, gaps=0.0, joined=0.0):
     return Image.alpha_composite(out, ov)
 
 
+HONEY_C = (220, 154, 44)
+PAL = [(127, 167, 184), (165, 140, 191), (143, 176, 138), (201, 154, 138), (159, 165, 201), (184, 176, 122), (134, 181, 168), (190, 150, 175)]
+IV = json.loads((D / "interventions.json").read_text())
+HW = json.loads((D / "highways.json").read_text())
+HISL = np.fromfile(D / "hexisl.bin", "<u2").reshape(HJ["n"], 6)
+KCOL = {"stops": (138, 122, 196), "treepits": (79, 143, 90), "schools": (91, 134, 196), "parking": (150, 132, 110)}
+
+
+def islands_state(m, picks):
+    """union-find over the chosen picks → root per island, area per root, largest root"""
+    A = IV["area"][m]; par = list(range(len(A)))
+    def find(i):
+        while par[i] != i:
+            par[i] = par[par[i]]; i = par[i]
+        return i
+    for p in picks:
+        r = [find(i) for i in p["reach"][m]]
+        for q in r[1:]:
+            par[find(q)] = find(r[0])
+    root = [find(i) for i in range(len(A))]; tot = {}
+    for i in range(1, len(A)):
+        tot[root[i]] = tot.get(root[i], 0) + A[i]
+    big = max(tot, key=tot.get)
+    return root, tot, big
+
+
+def draw_islands(im, v, m, state, alpha=1.0, flash=None):
+    root, tot, big = state
+    k = IV["months"].index(m)
+    d = ImageDraw.Draw(im, "RGBA")
+    e = HJ["edge"] * 0.93 / v.px
+    px, py = v.xy(HX, HY); py = py - MAP_Y
+    ang = np.arange(6) * np.pi / 3
+    isl = HISL[:, k]
+    for i in np.nonzero((isl > 0) & (px > -20) & (px < W + 20) & (py > -20) & (py < MAP_H + 20))[0]:
+        r = root[isl[i]]; a_ = tot[r]
+        c = HONEY_C if r == big else ((214, 208, 194) if a_ < 3 else PAL[r % len(PAL)])
+        al = alpha
+        if flash is not None and r == big and flash.get(isl[i]):
+            al = min(1.0, alpha * (0.6 + 0.4 * flash[isl[i]]))
+        pts = [(px[i] + e * math.cos(t), py[i] + e * math.sin(t)) for t in ang]
+        d.polygon(pts, fill=c + (int(232 * al),))
+    return im
+
+
+def draw_highways(im, v, key, t, alpha=1.0, bees=True):
+    d = ImageDraw.Draw(im, "RGBA")
+    for h in HW[key]:
+        x, y = _t.transform(np.array([q[0] for q in h["p"]]), np.array([q[1] for q in h["p"]]))
+        px, py = v.xy(x, y); py = py - MAP_Y
+        d.line(list(zip(px, py)), fill=(150, 88, 14, int((120 + 110 * h["s"]) * alpha)), width=max(2, int(2 + 7 * h["s"] * (FULL.span / v.span) ** 0.5)), joint="curve")
+        if bees and alpha > 0.05:
+            seg = np.hypot(np.diff(x), np.diff(y)); L_ = seg.sum(); cum = np.r_[0, np.cumsum(seg)]
+            n = 2 + int(6 * h["s"])
+            for k in range(n):
+                s0 = ((t * 260 + k * L_ / n + hash(h["len"]) % 997) % (L_ + 1e-6))
+                for tail in range(6):
+                    s_ = s0 - tail * 14
+                    if s_ < 0:
+                        continue
+                    j = min(len(seg) - 1, np.searchsorted(cum, s_) - 1); f = (s_ - cum[j]) / max(seg[j], 1e-6)
+                    bx, by = px[j] + (px[j + 1] - px[j]) * f, py[j] + (py[j + 1] - py[j]) * f
+                    r = 3.2 - tail * 0.4
+                    d.ellipse([bx - r, by - r, bx + r, by + r], fill=(255, 238, 176, int(255 * alpha * (1 - tail / 6))))
+    return im
+
+
+def icon(d, x, y, kind, r=13, a=255):
+    c = KCOL[kind]
+    d.ellipse([x - r, y - r, x + r, y + r], fill=c + (a,), outline=(255, 255, 255, a), width=3)
+    if kind == "treepits":
+        d.ellipse([x - r * 0.42, y - r * 0.6, x + r * 0.42, y + r * 0.2], fill=(255, 255, 255, a)); d.rectangle([x - 1.5, y + 0.1 * r, x + 1.5, y + r * 0.6], fill=(255, 255, 255, a))
+    elif kind == "stops":
+        d.rounded_rectangle([x - r * 0.35, y - r * 0.55, x + r * 0.35, y + r * 0.2], 2, fill=(255, 255, 255, a)); d.rectangle([x - 1.2, y + 0.2 * r, x + 1.2, y + r * 0.6], fill=(255, 255, 255, a))
+
+
 def main():
     t0 = time.time()
     OUT.mkdir(parents=True, exist_ok=True); fr = OUT / "frames"; fr.mkdir(exist_ok=True)
     for f in fr.glob("*.jpg"):
         f.unlink()
-    g0 = ground_canvas(7)
-    T = {m: trees_layer(g0, m) for m in range(3, 10)}
+    g0 = ground_canvas(7); T7 = trees_layer(g0, 7)
+    base, t7 = crop(g0, FULL), crop(T7, FULL)
     print(f"[{time.time() - t0:.0f} s] canvases", flush=True)
-    stops = json.loads((D / "stops.json").read_text()); ch = [s for s in stops if s["rank"] > 0]
-    SX_, SY_ = _t.transform(np.array([s["lon"] for s in ch]), np.array([s["lat"] for s in ch]))
-    I = ST["islands"]
-    col = lambda g, m, a: (0 if g == "small" else 7) + (m - 3) + (14 if a else 0)
+    m = "07"; c = IV["combos"]; b7, tp7 = c["none"][m], c["treepits"][m]
+    ST_ = ST
     LBL = [("TEMPELHOFER FELD", 13.401, 52.4735), ("HASENHEIDE", 13.4175, 52.4845), ("NEUKÖLLN", 13.44, 52.479), ("BRITZ", 13.437, 52.448), ("KREUZBERG", 13.395, 52.493), ("TEMPELHOF", 13.388, 52.458)]
     LX, LY = _t.transform(np.array([l[1] for l in LBL]), np.array([l[2] for l in LBL]))
 
-    def compose(mapimg, title, sub, cap=None, v=FULL, labels=1.0, overlay=None):
-        im = Image.new("RGB", (W, H), BG); im.paste(mapimg.convert("RGB"), (0, 0)) if mapimg.size == (W, H) else im.paste(mapimg.convert("RGB"), (0, MAP_Y))
+    def compose(mapimg, title, sub, cap=None, labels=1.0, overlay=None):
+        im = Image.new("RGB", (W, H), BG); im.paste(mapimg.convert("RGB"), (0, MAP_Y))
         d = ImageDraw.Draw(im, "RGBA")
         if labels > 0:
-            px, py = v.xy(LX, LY)
+            px, py = FULL.xy(LX, LY)
             for (n, *_), x, y in zip(LBL, px, py):
-                if 60 < x < W - 60 and MAP_Y + 30 < y < MAP_Y + MAP_H - 30:
-                    d.text((x, y), n, font=F["lab"], fill=(70, 66, 58, int(220 * labels)), anchor="mm", stroke_width=4, stroke_fill=(255, 253, 248, int(220 * labels)))
+                d.text((x, y), n, font=F["lab"], fill=(60, 56, 50, int(230 * labels)), anchor="mm", stroke_width=4, stroke_fill=(255, 253, 248, int(230 * labels)))
         d.rectangle([0, 0, W, MAP_Y], fill=BG)
         d.text((48, 34), "#30DAYMAPCHALLENGE · DAY 20 · HEXAGONS · BERLIN", font=F["qs"], fill=HONEY_ACC)
         d.text((48, 72), title, font=F["q"], fill=INK)
@@ -216,92 +290,78 @@ def main():
     def save(im):
         nonlocal n; im.save(fr / f"f{n:04d}.jpg", quality=92); n += 1
 
-    def badge(d, x, y, txt, sub):
-        d.rounded_rectangle([x, y, x + 300, y + 110], 20, fill=(255, 253, 248, 230))
-        d.text((x + 20, y + 14), txt, font=F["mid"], fill=VIOLET); d.text((x + 20, y + 62), sub, font=F["lab"], fill=INK2)
+    def badge(d, val, sub, col=HONEY_ACC):
+        d.rounded_rectangle([W - 330, MAP_Y + 22, W - 22, MAP_Y + 132], 20, fill=(255, 253, 248, 236))
+        d.text((W - 306, MAP_Y + 32), val, font=F["mid"], fill=col); d.text((W - 306, MAP_Y + 82), sub, font=F["lab"], fill=INK2)
 
-    Q = "Where are Berlin's bee highways?"
-    base = crop(g0, FULL)
-    # A · ground (2.4 s)
+    Q = "Can a wild bee cross Neukölln?"
+    state0 = islands_state(m, [])
+    T = 0.0
+    # A · flowers (2.4 s)
     for k in range(int(FPS * 2.4)):
-        a = ease(k / (FPS * 1.2))
-        img = Image.blend(Image.new("RGB", base.size, BG), base, a)
-        save(compose(img, Q, "Tempelhofer Feld · Hasenheide · Neukölln", ("Green = flowers for bees", "Berlin biotope map 2024, every patch scored"), labels=a))
-    # B · trees (2.6 s)
-    t7 = crop(T[7], FULL)
-    for k in range(int(FPS * 2.6)):
-        a = ease(k / (FPS * 1.4))
-        save(compose(Image.blend(base, t7, a), Q, "Tempelhofer Feld · Hasenheide · Neukölln", (f"{ST['trees']:,} trees, one by one", "honey = in flower in July and good for bees (lime)")))
-    # C · honeycomb rises (3.6 s), July, small bees, today
-    vals7 = HV[:, col("small", 7, False)]
-    for k in range(int(FPS * 3.6)):
-        a = ease(k / (FPS * 2.2))
-        img = draw_hexes(t7, FULL, vals7 * a, lift=a, alpha=0.66 * a)
-        save(compose(img, Q, "July · small solitary bees", ("A honeycomb of bee links", "bigger and darker cell = stronger link for bees")))
-    still = compose(draw_hexes(t7, FULL, vals7, gaps=1.0), Q, "July · small solitary bees", ("A honeycomb of bee links", "bigger and darker cell = stronger link for bees"))
-    still.save(OUT / "still_honeycomb.png")
-    # D · months March → September (6.4 s)
-    ND = int(FPS * 6.4)
-    for k in range(ND):
-        mf = 3 + 6 * k / (ND - 1); m0 = int(math.floor(mf)); f = mf - m0; m1 = min(9, m0 + 1)
-        vals = HV[:, col("small", m0, False)] * (1 - f) + HV[:, col("small", m1, False)] * f
-        tm = crop(T[m0 if f < 0.5 else m1], FULL)
-        mm = m0 if f < 0.5 else m1
-        isl = I.get(f"{mm:02d}")
-        def ov(d, isl=isl, mm=mm):
-            d.rounded_rectangle([W - 330, MAP_Y + 24, W - 24, MAP_Y + 150], 20, fill=(255, 253, 248, 232))
-            d.text((W - 306, MAP_Y + 36), MON[mm], font=F["mid"], fill=INK)
-            d.text((W - 306, MAP_Y + 86), f"largest network {isl['largest_before']:.0f} ha" if isl else "almost nothing flowers yet", font=F["lab"], fill=HONEY_ACC)
-            # month bar
-            for i, m in enumerate(range(3, 10)):
-                x = W - 306 + i * 40; d.rounded_rectangle([x, MAP_Y + 124, x + 34, MAP_Y + 132], 3, fill=HONEY_ACC if m <= mm else (226, 220, 208))
-        save(compose(draw_hexes(tm, FULL, vals), Q, "March to September · small solitary bees", ("The network grows with the flowers", "willow in March, maple in April, lime in July"), overlay=ov))
-    # E · bee stops (4.8 s): zoom to the gaps, stops appear, cells grow
-    gx = HX[JOINED7].mean(); gy = HY[JOINED7].mean()
-    zs = 4600; zh = zs * MAP_H / W; fh = FULL.span * MAP_H / W
-    zx = min(max(0.5 * gx + 0.5 * SX_.mean(), FULL.x0 + zs / 2 + 1), FULL.x0 + FULL.span - zs / 2 - 1)
-    zy = min(max(0.5 * gy + 0.5 * SY_.mean(), FULL.y1 - fh + zh / 2 + 1), FULL.y1 - zh / 2 - 1)
-    ZV = View(zx, zy, zs)
-    big7 = T[7]
-    NE = int(FPS * 4.8); i7 = I["07"]
+        a = ease(k / (FPS * 1.2)); T += 1 / FPS
+        save(compose(Image.blend(Image.new("RGB", base.size, BG), base, a), Q, "Tempelhofer Feld · Hasenheide · Neukölln", ("Where bees find flowers", "meadows, gardens, parks, green courtyards"), labels=a))
+    # B · trees (2.2 s)
+    for k in range(int(FPS * 2.2)):
+        a = ease(k / (FPS * 1.2)); T += 1 / FPS
+        save(compose(Image.blend(base, t7, a), Q, "July", (f"{ST_['trees']:,} trees, one by one", "honey = lime trees in flower")))
+    # C · islands (3.4 s)
+    for k in range(int(FPS * 3.4)):
+        a = ease(k / (FPS * 1.4)); T += 1 / FPS
+        img = draw_islands(t7.copy(), FULL, m, state0, alpha=a)
+        save(compose(img, Q, "July · small solitary bees", (f"{ST_['islands_n'][m]} separate flower islands", "one colour = one network without a gap over 100 m"),
+                     overlay=lambda d: badge(d, f"{b7:.0f} ha", "largest network (honey)")))
+    still_isl = img
+    # D · highways with bees (3.4 s)
+    for k in range(int(FPS * 3.4)):
+        a = ease(k / (FPS * 0.8)); T += 1 / FPS
+        img = draw_highways(draw_islands(t7.copy(), FULL, m, state0, alpha=0.75), FULL, "small_07", T, alpha=a)
+        save(compose(img, Q, "July · small solitary bees", ("Bee highways", "where the model sends the most flower-to-flower trips")))
+    compose(img, Q, "July · small solitary bees", ("Bee highways", "where the model sends the most flower-to-flower trips")).save(OUT / "still_highways.png")
+    # E · tree pits, one by one (6 s)
+    picks = IV["picks"]["treepits"]
+    PX, PY = _t.transform(np.array([p["lon"] for p in picks]), np.array([p["lat"] for p in picks]))
+    NE = int(FPS * 6.0)
     for k in range(NE):
-        u = ease(k / (FPS * 1.6)); v = FULL.lerp(ZV, u)
-        a = ease((k - FPS * 1.6) / (FPS * 1.8))
-        vals = HV[:, col("small", 7, False)] * (1 - a) + HV[:, col("small", 7, True)] * a
-        img = draw_hexes(crop(big7, v), v, vals, gaps=1.0 - a * 0.6, joined=max(0.0, a))
-        def ov(d, v=v, a=a, k=k):
-            px, py = v.xy(SX_, SY_)
-            for j, (x, y) in enumerate(zip(px, py)):
-                if k > FPS * 1.4 and MAP_Y < y < MAP_Y + MAP_H:
-                    r = 9 + 3 * min(1, (k - FPS * 1.4) / 6)
-                    d.ellipse([x - r, y - r, x + r, y + r], fill=VIOLET + (230,), outline=(255, 255, 255, 255), width=2)
-                    d.text((x, y), str(ch[j]["rank"]), font=F["lab"], fill=(255, 255, 255), anchor="mm")
-            la = i7["largest_before"] + (i7["largest_after"] - i7["largest_before"]) * max(0, a)
-            badge(d, W - 340, MAP_Y + 24, f"{la:.0f} ha", "largest flower network")
-        save(compose(img, Q, "July · + 25 bee stops", ("25 flowering bus and tram stops", "violet: newly joined to the largest flower network"), v=v, labels=1 - u * 0.5, overlay=ov))
-    final = img
-    compose(final, Q, "July · + 25 bee stops", ("25 flowering bus and tram stops", "violet: newly joined to the largest flower network"), v=ZV, labels=0.5, overlay=ov).save(OUT / "still_stops.png")
-    # F · outro (4.2 s)
-    for k in range(int(FPS * 4.2)):
+        T += 1 / FPS
+        nk = min(25, int(25 * ease(k / (FPS * 4.6))))
+        st = islands_state(m, picks[:nk])
+        img = draw_highways(draw_islands(t7.copy(), FULL, m, st, alpha=0.82), FULL, "small_07", T, alpha=0.35, bees=False)
+        val = st[1][st[2]]
+        def ov(d, nk=nk, val=val):
+            px, py = FULL.xy(PX[:nk], PY[:nk])
+            for x, y in zip(px, py):
+                icon(d, x, y, "treepits", 12)
+            badge(d, f"{val:.0f} ha", f"largest network · {nk} tree pits", col=(79, 143, 90))
+        save(compose(img, "What if 25 tree pits flower?", "July · a 30 m × 30 m flower bed at each", ("Street trees stand in the gaps", f"{b7:.0f} ha → {tp7:.0f} ha largest network"), overlay=ov))
+    final = compose(img, "What if 25 tree pits flower?", "July · a 30 m × 30 m flower bed at each", ("Street trees stand in the gaps", f"{b7:.0f} ha → {tp7:.0f} ha largest network"), overlay=ov)
+    final.save(OUT / "still_treepits.png"); last = img
+    # F · outro (4.4 s)
+    for k in range(int(FPS * 4.4)):
         a = ease(k / (FPS * 0.6))
-        dim = Image.blend(final.convert("RGB"), Image.new("RGB", final.size, BG), 0.55 * a)
+        dim = Image.blend(last.convert("RGB"), Image.new("RGB", last.size, BG), 0.6 * a)
         def ov(d):
             if k < 3:
                 return
-            d.rounded_rectangle([40, MAP_Y + 70, W - 40, MAP_Y + 900], 28, fill=(255, 253, 248, 245))
-            d.text((W // 2, MAP_Y + 112), "Berlin · Tempelhofer Feld to Neukölln · July", font=F["sm"], fill=INK2, anchor="ma")
-            d.text((W // 2, MAP_Y + 168), f"{i7['largest_before']:.0f} → {i7['largest_after']:.0f} ha", font=F["big"], fill=VIOLET, anchor="ma")
-            d.text((W // 2, MAP_Y + 296), "largest flower network a small wild bee can use,", font=F["sm"], fill=INK, anchor="ma")
-            d.text((W // 2, MAP_Y + 332), "with 25 flowering bus and tram stops", font=F["sm"], fill=INK, anchor="ma")
-            d.text((W // 2, MAP_Y + 420), f"{ST['obs_pilot']:,}", font=F["num"], fill=HONEY_ACC, anchor="ma")
-            d.text((W // 2, MAP_Y + 502), f"wild-bee records, {ST['taxa_pilot']} taxa, compared with the model", font=F["sm"], fill=INK, anchor="ma")
-            d.text((W // 2, MAP_Y + 580), f"{ST['trees']:,}", font=F["num"], fill=(104, 142, 92), anchor="ma")
-            d.text((W // 2, MAP_Y + 662), "trees mapped one by one, each with its flowering months", font=F["sm"], fill=INK, anchor="ma")
-            d.text((W // 2, MAP_Y + 770), "Explore every month in 3D: barisparlatangiller.github.io", font=F["lab"], fill=INK2, anchor="ma")
-            d.text((W // 2, MAP_Y + 812), "A model of potential, not measured flight routes", font=F["lab"], fill=INK3, anchor="ma")
-        save(compose(dim, "Bee highways: the missing links", "a honeycomb of bee links over Berlin", v=ZV, labels=0, overlay=ov))
-    compose(dim, "Bee highways: the missing links", "a honeycomb of bee links over Berlin", v=ZV, labels=0, overlay=ov).save(OUT / "outro.png")
-    still.save(OUT / "cover.png")
+            d.rounded_rectangle([40, MAP_Y + 60, W - 40, MAP_Y + 910], 28, fill=(255, 253, 248, 246))
+            d.text((W // 2, MAP_Y + 100), "Largest flower network for small wild bees · July", font=F["sm"], fill=INK2, anchor="ma")
+            d.text((W // 2, MAP_Y + 150), f"{b7:.0f} → {tp7:.0f} ha", font=F["big"], fill=(79, 143, 90), anchor="ma")
+            d.text((W // 2, MAP_Y + 276), "with flower beds at 25 street-tree pits", font=F["sm"], fill=INK, anchor="ma")
+            rows = [("treepits", "25 tree pits", c["treepits"][m]), ("parking", "25 car-park edges", c["parking"][m]), ("stops", "25 bus & tram stops", c["stops"][m]), ("schools", "25 school yards", c["schools"][m])]
+            for j, (kk, nm, v_) in enumerate(rows):
+                y = MAP_Y + 352 + j * 66
+                icon(d, 110, y + 16, kk, 15)
+                d.text((140, y), nm, font=F["sm"], fill=INK)
+                d.rounded_rectangle([140, y + 38, 140 + int(640 * max(0.0, v_ - b7) / max(1, tp7 - b7)) + 4, y + 48], 5, fill=KCOL[kk])
+                d.text((W - 70, y + 2), f"+{max(0, v_ - b7):.0f} ha", font=F["lab"], fill=KCOL[kk], anchor="ra")
+            d.text((W // 2, MAP_Y + 640), f"{ST_['obs_pilot']:,} wild-bee records, {ST_['taxa_pilot']} taxa", font=F["sm"], fill=INK, anchor="ma")
+            d.text((W // 2, MAP_Y + 678), "62% where the map shows few flowers: balconies, tree pits", font=F["sm"], fill=INK2, anchor="ma")
+            d.text((W // 2, MAP_Y + 780), "Story mode & every layer in 3D: barisparlatangiller.github.io", font=F["lab"], fill=INK2, anchor="ma")
+            d.text((W // 2, MAP_Y + 820), "A model of potential, not measured flight routes", font=F["lab"], fill=INK3, anchor="ma")
+        save(compose(dim, "Bee highways: the missing links", "Berlin · Tempelhofer Feld to Neukölln", labels=0, overlay=ov))
+    compose(dim, "Bee highways: the missing links", "Berlin · Tempelhofer Feld to Neukölln", labels=0, overlay=ov).save(OUT / "outro.png")
+    compose(still_isl, Q, "July · small solitary bees", (f"{ST_['islands_n'][m]} separate flower islands", "one colour = one network without a gap over 100 m"),
+            overlay=lambda d: badge(d, f"{b7:.0f} ha", "largest network (honey)")).save(OUT / "cover.png")
     out = OUT / "day20_berlin_bee_highways.mp4"
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(FPS), "-i", str(fr / "f%04d.jpg"), "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
                     "-profile:v", "main", "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(out)], check=True)
